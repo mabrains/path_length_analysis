@@ -1,0 +1,5 @@
+gds_file: gds_examples/full_example.gds
+path_layer: 174
+path_dtype: 0
+cutting_layer: 1000
+cutting_dtype: 0

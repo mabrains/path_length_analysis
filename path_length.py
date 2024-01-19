@@ -1,4 +1,15 @@
 #### Add license #####
+
+"""Usage: path_length.py <config_file_path> [-h]
+
+Arguments:
+  <config_file_path>  Path to the config.yaml file.
+
+Options:
+  -h --help          Show this help message and exit.
+"""
+
+
 import gdstk
 import logging
 import os
@@ -6,8 +17,8 @@ from datetime import datetime
 from time import time
 from math import sqrt
 from functools import partial
-import pandas as pd
-import networkx as nx
+from docopt import docopt
+from yaml import safe_load
 
 
 def get_length(poly: gdstk.Polygon) -> float:
@@ -117,7 +128,7 @@ def get_polygon_label_pair(
 
 def split_polygon(
     poly: gdstk.Polygon, ports: dict[gdstk.Label, gdstk.Polygon]
-) -> gdstk.Polygon:
+) -> list[gdstk.Polygon]:
     """
     Split a polygon using boolean operations with a list of ports.
 
@@ -126,173 +137,87 @@ def split_polygon(
         ports (list[gdstk.Polygon]): A list of polygons representing ports used for splitting polygon.
 
     Returns:
-        gdstk.Polygon: The resulting polygon after the split operation.
+        list[gdstk.Polygon]: The resulting polygons after the split operation.
 
     """
     return gdstk.boolean(poly, list(ports.values()), "not")
 
 
-def construct_graph_data_frame(
-    polygons: list[list[gdstk.Polygon]],
-) -> pd.DataFrame:
+def get_path_length(splitted_polygons: list[gdstk.Polygon]) -> float | None:
     """
-    Construct a DataFrame representing a graph from a list of polygons splitted in a list.
+    Calculate and return the length of a path based on the given list of polygons.
 
-    Args:
-        polygons (list[list[gdstk.Polygon]]): A list of lists, where each inner list contains gdstk.Polygon objects.
+    Parameters:
+    - splitted_polygons (list[gdstk.Polygon]): List of polygons representing the path after cutting.
 
     Returns:
-        pd.DataFrame: A DataFrame representing the graph with columns "node1", "node2", and "length".
+    - float | None: The length of the path if valid, otherwise None.
 
     Note:
-        This function iterates through the nested list of polygons, calculates the length
-        between consecutive nodes in each polygon using the `get_length` function,
-        and constructs a DataFrame with columns "node1", "node2", and "length".
-
-    Example:
-        >>> poly0 = [gdstk.Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]), gdstk.Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]
-        >>> poly1 = [gdstk.Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]), gdstk.Polygon([(1, 0), (2, 0), (2, 1), (1, 1)])]
-        >>> polygons = [poly0, poly1]
-        >>> graph_df = construct_graph_data_frame(polygons)
-        >>> print(graph_df)
-              node1           node2       length
-        0  poly_0_node_0  poly_0_node_1     1.0
-        1  poly_0_node_1  poly_0_node_2     1.0
-        3  poly_1_node_0  poly_1_node_1     1.0
-        4  poly_1_node_1  poly_1_node_2     1.0
+    - If len(splitted_polygons) == 3, this indicates that two ports cut the path polygon,
+      and the desired path length is get_length(splitted_polygons[1]).
+    - If len(splitted_polygons) > 3, this indicates an invalid cut.
+      Also, if len(splitted_polygons) == 2, this indicates an invalid cut.
+    - If len(splitted_polygons) == 1, this indicates that this path is out of the cutting layer scope.
     """
-    records = []
-    for i, poly in enumerate(polygons):
-        for node, sub_poly in enumerate(poly):
-            node1 = f"poly_{i}_node_{node}"
-            node2 = f"poly_{i}_node_{node+1}"
-            length = get_length(sub_poly)
-            records.append([node1, node2, length])
-    df = pd.DataFrame(records, columns=["node1", "node2", "length"])
-    return df
+    if len(splitted_polygons) == 1:
+        logging.info("This polygon path has no cuts")
+    elif len(splitted_polygons) == 3:
+        path_length = get_length(splitted_polygons[1])
+        logging.info(f"Valid cut,  \n  path_length : {path_length}")
+        return path_length
+    else:
+        logging.info("Invalid cut")
 
 
-def get_nx_graph(graph_data_frame: pd.DataFrame) -> nx.Graph:
-    """
-    Create a NetworkX graph from a DataFrame containing edge information.
-
-    Args:
-        graph_data_frame (pd.DataFrame): A DataFrame with columns 'node1', 'node2', and 'length'
-                                          representing edges and their corresponding lengths.
-
-    Returns:
-        nx.Graph: A NetworkX graph constructed from the provided DataFrame.
-
-    Note:
-        This function uses the `nx.from_pandas_edgelist` method to create a graph.
-        The 'node1' and 'node2' columns of the DataFrame represent nodes,
-        and the 'length' column is used as the edge attribute.
-
-    Example:
-        >>> data = {
-        ...     'node1': ['poly_0_node_0', 'poly_0_node_1'],
-        ...     'node2': ['poly_0_node_1', 'poly_0_node_2'],
-        ...     'length': [1.0, 2.0]
-        ... }
-        >>> graph_df = pd.DataFrame(data)
-        >>> graph = get_nx_graph(graph_df)
-        >>> print(list(graph.edges(data=True)))
-        [('poly_0_node_0', 'poly_0_node_1', {'length': 1.0}),
-         ('poly_0_node_1', 'poly_0_node_2', {'length': 2.0})]
-    """
-    return nx.from_pandas_edgelist(graph_data_frame, "node1", "node2", "length")
-
-
-def _get_path_length_from_edges(
-    path_edges: list[tuple[str, str, dict[str, float]]]
-) -> float:
-    """
-    Calculate the total length of a path based on path edges.
-
-    Args:
-        path_edges (list[tuple[str, str, dict[str, float]]]):
-            A list of tuples representing edges in the path.
-            Each tuple contains source node, target node, and a dictionary with the 'length' attribute.
-
-    Returns:
-        float: The total length of the specified path.
-
-    Example:
-        >>> edges = [('A', 'B', {'length': 1.0}), ('B', 'C', {'length': 2.0}), ('C', 'D', {'length': 3.0})]
-        >>> result = _get_path_length_from_graph_data(edges)
-        >>> print(result)
-        6.0
-    """
-    path_length = 0
-    for edge in path_edges:
-        path_length += edge[2]["length"]
-    return path_length
-
-
-def get_path_length(graph: nx.Graph, start_node: str, end_node: str) -> float:
-    """
-    Calculate the total length of the shortest path between two nodes in a NetworkX graph.
-
-    Args:
-        graph (nx.Graph): The input graph.
-        start_node (str): The starting node.
-        end_node (str): The ending node.
-
-    Returns:
-        float: The total length of the shortest path between the specified nodes.
-
-    Raises:
-        nx.NetworkXNoPath: If there is no path between the specified nodes.
-
-    Example:
-        >>> G = nx.Graph()
-        >>> G.add_edge('A', 'B', length=1.0)
-        >>> G.add_edge('B', 'C', length=2.0)
-        >>> G.add_edge('C', 'D', length=3.0)
-        >>> result = get_path_length(G, 'A', 'D')
-        >>> print(result)
-        6.0
-    """
-    return nx.shortest_path_length(graph, start_node, end_node, "length")
-
-
-def main() -> None:
-    # example_path = "gds_examples/inverter.gds"
-    example_path = "gds_examples/test.gds"
-    path_layer = 174
-    cutting_layer = 1000
-    gds_lib = gdstk.read_gds(example_path)
-    # get polygons in path_layer
-    path_polygons = get_polygons(gds_lib, layer=path_layer)
+def path_length(
+    gds_file: str,
+    path_layer: int,
+    cutting_layer: int,
+    path_dtype: int = 0,
+    cutting_dtype: int = 0,
+) -> list[float]:
+    gds_lib = gdstk.read_gds(gds_file)
+    path_polygons = get_polygons(gds_lib, layer=path_layer, datatype=path_dtype)
     # get polygons in cutting layer
-    # ports_polygons = get_polygons(gds_lib, layer=cutting_layer)
-    polygon_labels_pairs = get_polygon_label_pair(gds_lib, cutting_layer)
+    polygon_labels_pairs = get_polygon_label_pair(
+        gds_lib, cutting_layer, datatype=cutting_dtype
+    )
     # split polygons using cutting layer polygons
     splitted_polygons = list(
         map(partial(split_polygon, ports=polygon_labels_pairs), path_polygons)
     )
-    # logging.info(splitted_polygons)
-    # prepare nx graph data_frame
-    graph_data_frame = construct_graph_data_frame(splitted_polygons)
-    logging.info(f"graph_data_frame : \n {graph_data_frame}")
-    # get nx graph from dataframe
-    path_length_graph = get_nx_graph(graph_data_frame)
-    logging.info(f"graph edges : {path_length_graph.edges}")
-    # solve graph for shorted path using start and end nodes
-    start_node, end_node = "poly_0_node_1", "poly_0_node_2"
-    path_length = get_path_length(path_length_graph, start_node, end_node)
-    logging.info(f"path_length : {path_length}")
+    path_length = list(map(get_path_length, splitted_polygons))
+    logging.info(f"path_length : \n {path_length}")
+    return [length for length in path_length if length is not None]
 
 
 if __name__ == "__main__":
+    args = docopt(__doc__)
+    config_file_path = args["<config_file_path>"]
+    if not os.path.isfile(config_file_path):
+        logging.error(f"{config_file_path} file can't be found")
+        exit(1)
+
+    try:
+        with open(config_file_path) as f:
+            config_data = safe_load(f)
+    except Exception as e:
+        logging.error(
+            f"failed to read config file  {config_file_path}, \n Error messege: {e} "
+        )
+        exit(1)
+
     if not os.path.exists("logs/"):
         os.mkdir("logs/")
 
-    now_str = datetime.utcnow().strftime("op_tests_%Y_%m_%d_%H_%M_%S")
+    now_str = datetime.utcnow().strftime("%Y_%m_%d_%H_%M_%S")
     logging.basicConfig(
         level=logging.DEBUG,
         handlers=[
-            logging.FileHandler(f"logs/{now_str}.log"),
+            logging.FileHandler(
+                f"logs/{config_data['gds_file'].split('/')[-1].split('.')[0]}_{now_str}.log"
+            ),
             logging.StreamHandler(),
         ],
         format="%(asctime)s | %(levelname)-7s | %(message)s",
@@ -301,6 +226,7 @@ if __name__ == "__main__":
     logging.getLogger()
 
     time_start = time()
-    main()
+    valid_path_lengths = path_length(**config_data)
+    logging.info(f"valid_path_lengths: \n {valid_path_lengths}")
     exc_time = time() - time_start
     logging.info(f"tests Execution time: {exc_time} sec")
