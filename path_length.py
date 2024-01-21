@@ -16,9 +16,10 @@ import os
 from datetime import datetime
 from time import time
 from math import sqrt
-from functools import partial
 from docopt import docopt
 from yaml import safe_load
+import pandas as pd
+import networkx as nx
 
 
 def get_length(poly: gdstk.Polygon) -> float:
@@ -63,127 +64,350 @@ def get_length(poly: gdstk.Polygon) -> float:
 
 def get_polygons(
     gdstk_lib: gdstk.Library,
-    layer: int,
+    path_layer: int,
+    cutting_layer: int,
     cell_name: str | None = None,
-    datatype: int = 0,
-) -> list[gdstk.Polygon]:
+    path_dtype: int = 0,
+    cutting_dtype: int = 0,
+) -> tuple[list[gdstk.Polygon], list[dict[str, gdstk.Polygon]]]:
     """
-    Extract polygons from the top-level cells of a GDS library with specific layer and datatype.
+    Retrieve polygons representing paths and cutting regions based on input parameters.
 
-    Args:
-        gdstk_lib (gdstk.Library): The GDS library containing the cells.
-        layer (int): The layer of the polygons to extract.
-        cell_name (str, optional): The name of the cell to extract polygons from. If None,
-            and only one top-level cell is found, that cell will be considered (default is None).
-        datatype (int, optional): The datatype of the polygons (default is 0).
+    Parameters:
+    - gdstk_lib (gdstk.Library): The gdstk.Library containing the desired cell.
+    - path_layer (int): Layer number for paths.
+    - cutting_layer (int): Layer number for cutting polygons.
+    - cell_name (str, optional): Name of the cell. Defaults to None.
+    - path_dtype (int, optional): Data type for paths. Defaults to 0.
+    - cutting_dtype (int, optional): Data type for cutting regions. Defaults to 0.
 
     Returns:
-        list[gdstk.Polygon]: A list of gdstk.Polygon objects extracted from the specified cell, layer, and datatype.
+    tuple: A tuple containing two elements.
+        - List of path polygons (gdstk.Polygon).
+        - List of dictionaries, where each dictionary represents cutting polygons
+          corresponding to a path polygon. Keys are labels, and values are
+          corresponding cutting polygons (dict[str, gdstk.Polygon]).
+
+    The function performs the following steps:
+    1. Calls _get_polygons to obtain path polygons, cutting polygons, and labels.
+    2. Filters cutting polygons to include only those that intersect with path polygons.
+    3. Filters labels based on whether their origin is inside cutting polygons.
+    4. Creates a dictionary (polygon_labels_pairs) mapping labels to cutting polygons.
+    5. Generates a list of dictionaries (cutting_polygons_per_path) representing cutting
+       polygons for each path polygon.
+    6. Returns the list of path polygons and cutting polygons per path.
 
     Example:
-        >>> gds_library = gdstk.read_gds(gds_file_path)
-        >>> layer_number = 10
-        >>> datatype_number = 0
-        >>> cell_name = "name"
-        >>> polygons = get_polygons(gds_library, layer=layer_number, cell_name=cell_name, datatype=datatype_number)
+    ```
+    path_polygons, cutting_polygons_per_path = get_polygons(
+        gdstk_lib=my_library,
+        path_layer=1,
+        cutting_layer=2,
+        cell_name="example",
+        path_dtype=0,
+        cutting_dtype=1
+    )
+    ```
     """
-    path_polygons: list[gdstk.Polygon] = []
+
+    polygon_labels_pairs: dict[str, gdstk.Polygon] = {}
+
+    path_polygons, cutting_polygons, labels = _get_polygons(
+        gdstk_lib, path_layer, cutting_layer, cell_name, path_dtype, cutting_dtype
+    )
+
+    # filter cutting polygons
+    cutting_polygons = [
+        polygon
+        for polygon in cutting_polygons
+        if check_if_polygon_cuts_path(polygon, path_polygons)
+    ]
+
+    # filter labels
+    labels = [
+        label
+        for label, condition1 in zip(
+            labels,
+            gdstk.inside([label.origin for label in labels], cutting_polygons),
+        )
+        if condition1
+    ]
+    labels_points = [(label.origin) for label in labels]
+
+    # dict[text(str), polygon[gdstk.Polygon]]
+    for polygon in cutting_polygons:
+        for label, condition in zip(labels, gdstk.inside(labels_points, polygon)):
+            if condition:
+                polygon_labels_pairs[label.text] = polygon
+                break
+
+    cutting_polygons_per_path: list[dict[str : gdstk.Polygon]] = []
+    for path_polygon in path_polygons:
+        valid_cutting_polygons = {}
+        for label, polygon in polygon_labels_pairs.items():
+            if check_if_polygon_cuts_path(polygon, [path_polygon]):
+                valid_cutting_polygons[label] = polygon
+        cutting_polygons_per_path.append(valid_cutting_polygons)
+
+    return path_polygons, cutting_polygons_per_path
+
+
+def _get_polygons(
+    gdstk_lib: gdstk.Library,
+    path_layer: int,
+    cutting_layer: int,
+    cell_name: str | None = None,
+    path_dtype: int = 0,
+    cutting_dtype: int = 0,
+) -> tuple[gdstk.Polygon, gdstk.Polygon, list[gdstk.Label]]:
+    """
+    Retrieve polygons representing paths and cutting regions from a gdstk.Library.
+
+    Parameters:
+    - gdstk_lib (gdstk.Library): The gdstk.library containing the desired cell.
+    - path_layer (int): Layer number for paths.
+    - cutting_layer (int): Layer number for cutting regions.
+    - cell_name (str, optional): Name of the cell. Defaults to None.
+    - path_dtype (int, optional): Data type for paths. Defaults to 0.
+    - cutting_dtype (int, optional): Data type for cutting regions. Defaults to 0.
+
+    Returns:
+    tuple: A tuple containing three elements.
+        - Polygons representing path (gdstk.Polygon).
+        - Polygons representing cutting regions (gdstk.Polygon).
+        - List of labels associated with cutting regions (list[gdstk.Label]).
+
+    The function performs the following steps:
+    1. Retrieves the top-level cells from the gdstk.Library.
+    2. If no cells are available, logs an error and exits.
+    3. If multiple top-level cells exist and no specific cell is specified, logs an error and exits.
+    4. If a specific cell name is provided, searches for the cell with that name.
+    5. Retrieves path polygons from the selected cell based on layer and datatype.
+    6. Merges path polygons using gdstk.boolean with "or" operation.
+    7. Retrieves cutting polygons and labels from the selected cell based on layer and datatype.
+    8. Returns path polygons, cutting polygons, and labels.
+
+    Example:
+    ```
+    path_polygons, cutting_polygons, labels = _get_polygons(
+        gdstk_lib=my_library,
+        path_layer=1,
+        cutting_layer=2,
+        cell_name="example",
+        path_dtype=0,
+        cutting_dtype=1
+    )
+    ```
+    """
     cells = gdstk_lib.top_level()
+    if len(cells) < 1:
+        logging.error("no cells available")
+        exit(1)
+
     if len(cells) > 1 and cell_name is None:
         logging.error("Please specify a cell name when multiple top-level cells exist.")
         exit(1)
 
+    cell: gdstk.Cell | None = None
+
     if cell_name is None:
-        path_polygons = cells[0].get_polygons(
-            depth=None, layer=layer, datatype=datatype
-        )
+        cell = cells[0]
     else:
-        for cell in cells:
-            if cell.name == cell_name:
-                path_polygons = cell.get_polygons(
-                    depth=None, layer=layer, datatype=datatype
-                )
+        for c in cells:
+            if c.name == cell_name:
+                cell = c
                 break
+    if cell is None:
+        logging.error("Invalid cell name")
+        exit(1)
 
-    merged_polygons = gdstk.boolean(path_polygons, path_polygons, "or")
-    logging.info(
-        f"cell_name={cell_name}, number of polygons={len(path_polygons)}, "
-        f"number of polygons after merge={len(merged_polygons)} "
+    path_polygons = cell.get_polygons(depth=None, layer=path_layer, datatype=path_dtype)
+    path_polygons = gdstk.boolean(path_polygons, path_polygons, "or")
+    cutting_polygons = cell.get_polygons(
+        depth=None, layer=cutting_layer, datatype=cutting_dtype
     )
-    return merged_polygons
+    labels = cell.get_labels(depth=None, layer=cutting_layer, texttype=cutting_dtype)
+    return path_polygons, cutting_polygons, labels
 
 
-def get_polygon_label_pair(
-    gdstk_lib: gdstk.Library, layer: int, datatype: int = 0
-) -> dict[str, gdstk.Polygon]:
+def check_if_polygon_cuts_path(
+    polygon: gdstk.Polygon, path_polygons: list[gdstk.Polygon]
+) -> bool:
     """
-    Extracts polygons and corresponding labels from the top-level cells in a GDSTk library.
+    Check if a polygon cuts through a set of path polygons.
 
-    Args:
-    - gdstk_lib (gdstk.Library): The GDSTk library containing the cells.
-    - layer (int): The layer of interest for polygon extraction.
-    - datatype (int, optional): The datatype of interest for polygon extraction. Defaults to 0.
+    Parameters:
+    - polygon (gdstk.Polygon): The polygon to be checked for cutting through paths.
+    - path_polygons (list[gdstk.Polygon]): List of path polygons to check against.
 
     Returns:
-    dict[str, gdstk.Polygon]: A dictionary mapping labels to their corresponding polygons.
+    bool: True if the given polygon cuts through any polygon of the set of path polygons, False otherwise.
 
-    Note:
-    - The function assumes that each cell in the library has unique labels.
+    The function performs the following steps:
+    1. Calculates the boolean operation 'not' between the given polygon and the set of path polygons.
+    2. Returns True if the length of the result is 2, indicating that the polygon cuts through the paths.
+       Otherwise, returns False.
+
+    Example:
+    ```
+    is_cutting = check_if_polygon_cuts_path(
+        polygon=my_polygon,
+        path_polygons=[path1, path2, path3]
+    )
+    ```
     """
-
-    polygon_labels_pairs: dict[str, gdstk.Polygon] = {}
-    polygons: list[gdstk.Polygon] = []
-    labels: list[gdstk.Label] = []
-    for cell in gdstk_lib.top_level():
-        polygons += cell.get_polygons(layer=layer, datatype=datatype)
-        labels += cell.get_labels(layer=layer, texttype=datatype)
-    for poly, label in zip(polygons, labels):
-        polygon_labels_pairs[label.text] = poly
-    return polygon_labels_pairs
+    return len(gdstk.boolean(polygon, path_polygons, "not")) == 2
 
 
 def split_polygon(
-    poly: gdstk.Polygon, ports: dict[gdstk.Label, gdstk.Polygon]
+    poly: gdstk.Polygon, cutting_polygons: list[gdstk.Polygon]
 ) -> list[gdstk.Polygon]:
     """
-    Split a polygon using boolean operations with a list of ports.
-
-    Args:
-        poly (gdstk.Polygon): The input polygon to be split.
-        ports (list[gdstk.Polygon]): A list of polygons representing ports used for splitting polygon.
-
-    Returns:
-        list[gdstk.Polygon]: The resulting polygons after the split operation.
-
-    """
-    return gdstk.boolean(poly, list(ports.values()), "not")
-
-
-def get_path_length(splitted_polygons: list[gdstk.Polygon]) -> float | None:
-    """
-    Calculate and return the length of a path based on the given list of polygons.
+    Split a polygon using a set of cutting polygons.
 
     Parameters:
-    - splitted_polygons (list[gdstk.Polygon]): List of polygons representing the path after cutting.
+    - poly (gdstk.Polygon): The polygon to be split.
+    - cutting_polygons (list[gdstk.Polygon]): List of cutting polygons for the split operation.
 
     Returns:
-    - float | None: The length of the path if valid, otherwise None.
+    list[gdstk.Polygon]: List of polygons resulting from the split operation.
 
-    Note:
-    - If len(splitted_polygons) == 3, this indicates that two ports cut the path polygon,
-      and the desired path length is get_length(splitted_polygons[1]).
-    - If len(splitted_polygons) > 3, this indicates an invalid cut.
-      Also, if len(splitted_polygons) == 2, this indicates an invalid cut.
-    - If len(splitted_polygons) == 1, this indicates that this path is out of the cutting layer scope.
+    The function performs the following steps:
+    1. Calculates the boolean operation 'not' between the given polygon and the cutting polygons.
+    2. Returns a list of polygons resulting from the split operation.
+
+    Example:
+    ```
+    split_result = split_polygon(
+        poly=my_polygon,
+        cutting_polygons=[cutting1, cutting2, cutting3]
+    )
+    ```
     """
-    if len(splitted_polygons) == 1:
-        logging.info("This polygon path has no cuts")
-    elif len(splitted_polygons) == 3:
-        path_length = get_length(splitted_polygons[1])
-        logging.info(f"Valid cut,  \n  path_length : {path_length}")
-        return path_length
-    else:
-        logging.info("Invalid cut")
+    return gdstk.boolean(poly, cutting_polygons, "not")
+
+
+def construct_graph_data_frame(
+    path_polygons: list[gdstk.Polygon], cutting_polygons: list[dict[str, gdstk.Polygon]]
+) -> pd.DataFrame:
+    """
+    Construct a DataFrame representing graph data from path_polygons and cutting polygons.
+
+    Parameters:
+    - path_polygons (list[gdstk.Polygon]): List of path polygons.
+    - cutting_polygons (list[dict[str, gdstk.Polygon]]): List of dictionaries,
+      where each dictionary represents cutting polygons corresponding to a path polygon.
+      Keys are labels, and values are corresponding cutting polygons.
+
+    Returns:
+    pd.DataFrame: DataFrame with columns 'node1', 'node2', and 'length' representing
+    the graph data.
+
+    The function performs the following steps:
+    1. Iterates over path_polygons, cutting_polygons.items() to process each path and its cutting polygons.
+    2. For each pair of adjacent cutting polygons, extracts node1, node2, and the length of the connecting segment.
+    3. Appends records (node1, node2, length) to a list.
+    4. Constructs a DataFrame from the list of records.
+    5. Logs the resulting DataFrame for debugging purposes.
+    6. Returns the constructed DataFrame.
+
+    Example:
+    ```
+    graph_df = construct_graph_data_frame(
+        path_polygons=[path1, path2, path3],
+        cutting_polygons={
+            "label1": cutting_poly1,
+            "label2": cutting_poly2,
+            "label3": cutting_poly3
+        }
+    )
+    ```
+    """
+    records = []
+    for poly, cutting_polys in zip(path_polygons, cutting_polygons):
+        if cutting_polys:
+            labels = list(cutting_polys.keys())
+            cutting_polys = list(cutting_polys.values())
+            for j, sub_poly in enumerate(split_polygon(poly, cutting_polys)[1:-1]):
+                node1 = f"{labels[j]}"
+                node2 = f"{labels[j+1]}"
+                length = get_length(sub_poly)
+                records.append([node1, node2, length])
+    df = pd.DataFrame(records, columns=["node1", "node2", "length"])
+    return df
+
+
+def get_nx_graph(graph_data_frame: pd.DataFrame) -> nx.Graph:
+    """
+    Create a NetworkX graph from a DataFrame containing edge information.
+    Args:
+        graph_data_frame (pd.DataFrame): A DataFrame with columns 'node1', 'node2', and 'length'
+                                          representing edges and their corresponding lengths.
+    Returns:
+        nx.Graph: A NetworkX graph constructed from the provided DataFrame.
+    Note:
+        This function uses the `nx.from_pandas_edgelist` method to create a graph.
+        The 'node1' and 'node2' columns of the DataFrame represent nodes,
+        and the 'length' column is used as the edge attribute.
+    Example:
+        >>> data = {
+        ...     'node1': ['a', 'b'],
+        ...     'node2': ['b', 'c'],
+        ...     'length': [1.0, 2.0]
+        ... }
+        >>> graph_df = pd.DataFrame(data)
+        >>> graph = get_nx_graph(graph_df)
+        >>> print(list(graph.edges(data=True)))
+        [('a', 'b', {'length': 1.0}),
+         ('b', 'c', {'length': 2.0})]
+    """
+    return nx.from_pandas_edgelist(graph_data_frame, "node1", "node2", "length")
+
+
+def get_paths_report(graph: nx.Graph) -> pd.DataFrame:
+    """
+    Generate a report of shortest path lengths between all pairs of nodes in a graph.
+
+    Parameters:
+    - graph (nx.Graph): The input graph with weighted edges.
+
+    Returns:
+    pd.DataFrame: DataFrame containing information about shortest path lengths
+    between all pairs of nodes. Columns include 'node1', 'node2', and 'length'.
+
+    The function performs the following steps:
+    1. Iterates over all pairs of nodes in the graph.
+    2. Uses NetworkX's shortest_path_length to find the shortest path length between each pair,
+       considering edge weights defined by the 'length' attribute.
+    3. Handles cases where no path exists between nodes using a try-except block.
+    4. Appends records (node1, node2, length) to a list.
+    5. Constructs a DataFrame from the list of records.
+    6. Adds a 'sorted_nodes' column for later duplicate checking.
+    7. Drops duplicate rows based on the 'sorted_nodes' column.
+    8. Returns the resulting DataFrame.
+    """
+    nodes = graph.nodes
+    records = []
+    for start_node in nodes:
+        for end_node in nodes:
+            if start_node != end_node:
+                try:
+                    path_length = nx.shortest_path_length(
+                        graph, start_node, end_node, weight="length"
+                    )
+                except nx.NetworkXNoPath:
+                    path_length = -1
+                records.append([start_node, end_node, path_length])
+    report = pd.DataFrame(records)
+    report.columns = ["node1", "node2", "length"]
+    # Sort values in each row and create a new sorted column
+    report["sorted_nodes"] = report.apply(
+        lambda row: "".join(sorted([row["node1"], row["node2"]])), axis=1
+    )
+
+    # Drop duplicates based on the sorted column
+    report = report.drop_duplicates("sorted_nodes").drop("sorted_nodes", axis=1)
+    return report
 
 
 def path_length(
@@ -193,22 +417,61 @@ def path_length(
     cell_name: str | None = None,
     path_dtype: int = 0,
     cutting_dtype: int = 0,
-) -> list[float]:
-    gds_lib = gdstk.read_gds(gds_file)
-    path_polygons = get_polygons(
-        gds_lib, layer=path_layer, cell_name=cell_name, datatype=path_dtype
+) -> pd.DataFrame:
+    """
+    Calculate the shortest path lengths between cutting polygons on paths in a gds file.
+
+    Parameters:
+    - gds_file (str): The path to the gds file.
+    - path_layer (int): Layer number for paths.
+    - cutting_layer (int): Layer number for cutting regions.
+    - cell_name (str, optional): Name of the cell. Defaults to None.
+    - path_dtype (int, optional): Data type for paths. Defaults to 0.
+    - cutting_dtype (int, optional): Data type for cutting regions. Defaults to 0.
+
+    Returns:
+    pd.DataFrame: DataFrame containing information about shortest path lengths
+    between cutting polygons. Columns include 'node1', 'node2', and 'length'.
+
+    The function performs the following steps:
+    1. Reads the gds file using gdstk.read_gds to obtain a gdstk.Library.
+    2. Calls the get_polygons function to retrieve path and cutting polygons.
+    3. Constructs a DataFrame with graph information using construct_graph_data_frame.
+    4. Converts the DataFrame to a NetworkX graph using get_nx_graph.
+    5. Generates a report of shortest path lengths between labels using get_paths_report.
+    6. Returns the DataFrame containing path lengths.
+
+    Example:
+    ```
+    gds_file_path = "path/to/your/file.gds"
+    lengths_df = path_length(
+        gds_file=gds_file_path,
+        path_layer=1,
+        cutting_layer=2,
+        cell_name="example",
+        path_dtype=0,
+        cutting_dtype=1
     )
-    # get polygons in cutting layer
-    polygon_labels_pairs = get_polygon_label_pair(
-        gds_lib, cutting_layer, datatype=cutting_dtype
+    ```
+    """
+    # read gds_lib
+    gdstk_lib = gdstk.read_gds(gds_file)
+    # get path_polygons and cutting polygons
+    path_polygons, cutting_polygons = get_polygons(
+        gdstk_lib=gdstk_lib,
+        path_layer=path_layer,
+        cutting_layer=cutting_layer,
+        cell_name=cell_name,
+        path_dtype=path_dtype,
+        cutting_dtype=cutting_dtype,
     )
-    # split polygons using cutting layer polygons
-    splitted_polygons = list(
-        map(partial(split_polygon, ports=polygon_labels_pairs), path_polygons)
-    )
-    path_length = list(map(get_path_length, splitted_polygons))
-    logging.info(f"path_length : \n {path_length}")
-    return [length for length in path_length if length is not None]
+    # get networkx graph
+    df = construct_graph_data_frame(path_polygons, cutting_polygons)
+    graph = get_nx_graph(df)
+    # generate report for all paths
+    report = get_paths_report(graph)
+    logging.info(f"report : {report}")
+    return report
 
 
 if __name__ == "__main__":
@@ -248,4 +511,4 @@ if __name__ == "__main__":
     valid_path_lengths = path_length(**config_data)
     logging.info(f"valid_path_lengths: \n {valid_path_lengths}")
     exc_time = time() - time_start
-    logging.info(f"tests Execution time: {exc_time} sec")
+    logging.info(f"Execution time: {exc_time} sec")
