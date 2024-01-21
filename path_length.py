@@ -62,37 +62,53 @@ def get_length(poly: gdstk.Polygon) -> float:
 
 
 def get_polygons(
-    gdstk_lib: gdstk.Library, layer: int, datatype: int = 0
+    gdstk_lib: gdstk.Library,
+    layer: int,
+    cell_name: str | None = None,
+    datatype: int = 0,
 ) -> list[gdstk.Polygon]:
     """
-    Extract polygons from the top-level cells of a gdstk library with specific layer and datatype.
+    Extract polygons from the top-level cells of a GDS library with specific layer and datatype.
 
     Args:
         gdstk_lib (gdstk.Library): The GDS library containing the cells.
         layer (int): The layer of the polygons to extract.
+        cell_name (str, optional): The name of the cell to extract polygons from. If None,
+            and only one top-level cell is found, that cell will be considered (default is None).
         datatype (int, optional): The datatype of the polygons (default is 0).
 
     Returns:
-        list[gdstk.Polygon]: A list of gdstk.Polygon objects extracted from the specified layer and datatype.
-
-    Note:
-        The function iterates through the top-level cells of the gdstk_lib library,
-        flattens each cell to obtain all polygons within it, and filters polygons
-        based on the specified layer and datatype.
+        list[gdstk.Polygon]: A list of gdstk.Polygon objects extracted from the specified cell, layer, and datatype.
 
     Example:
         >>> gds_library = gdstk.read_gds(gds_file_path)
         >>> layer_number = 10
         >>> datatype_number = 0
-        >>> polygons = get_polygons(gds_library, layer=layer_number, datatype=datatype_number)
+        >>> cell_name = "name"
+        >>> polygons = get_polygons(gds_library, layer=layer_number, cell_name=cell_name, datatype=datatype_number)
     """
     path_polygons: list[gdstk.Polygon] = []
-    for cell in gdstk_lib.top_level():
-        path_polygons += cell.get_polygons(layer=layer, datatype=datatype)
+    cells = gdstk_lib.top_level()
+    if len(cells) > 1 and cell_name is None:
+        logging.error("Please specify a cell name when multiple top-level cells exist.")
+        exit(1)
+
+    if cell_name is None:
+        path_polygons = cells[0].get_polygons(
+            depth=None, layer=layer, datatype=datatype
+        )
+    else:
+        for cell in cells:
+            if cell.name == cell_name:
+                path_polygons = cell.get_polygons(
+                    depth=None, layer=layer, datatype=datatype
+                )
+                break
 
     merged_polygons = gdstk.boolean(path_polygons, path_polygons, "or")
     logging.info(
-        f"number of top_cells = {len(gdstk_lib.top_level())}, number of polygons = {len(path_polygons)}, number of polygons after merge = {len(merged_polygons)} "
+        f"cell_name={cell_name}, number of polygons={len(path_polygons)}, "
+        f"number of polygons after merge={len(merged_polygons)} "
     )
     return merged_polygons
 
@@ -174,11 +190,14 @@ def path_length(
     gds_file: str,
     path_layer: int,
     cutting_layer: int,
+    cell_name: str | None = None,
     path_dtype: int = 0,
     cutting_dtype: int = 0,
 ) -> list[float]:
     gds_lib = gdstk.read_gds(gds_file)
-    path_polygons = get_polygons(gds_lib, layer=path_layer, datatype=path_dtype)
+    path_polygons = get_polygons(
+        gds_lib, layer=path_layer, cell_name=cell_name, datatype=path_dtype
+    )
     # get polygons in cutting layer
     polygon_labels_pairs = get_polygon_label_pair(
         gds_lib, cutting_layer, datatype=cutting_dtype
