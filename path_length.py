@@ -393,20 +393,20 @@ def get_node_names(poly, labels: list[gdstk.Label]):
     logging.info(f"names: {names}")
     logging.info(f"points : {points}")
 
-    return node_names
+    return list(set(node_names))
 
 
 def _min_max_labels(path: gdstk.Polygon, cutting_poly: gdstk.Polygon, text: str):
     points = gdstk.boolean(path, cutting_poly, "and")[0].points
     x_values, y_values = zip(*points)
+    #logging.info(f"x: {x_values},\n  y:{y_values}")
     xmin = min(x_values)
     ymin = min(y_values)
     xmax = max(x_values)
     ymax = max(y_values)
     logging.info(f"xmin:{xmin},xmax:{xmax},ymin{ymin},ymax{ymax}")
     return [
-        gdstk.Label(text, origin=(xmin, ymin)),
-        gdstk.Label(text, origin=(xmax, ymax)),
+        gdstk.Label(text, origin=point) for point in points
     ]
 
 
