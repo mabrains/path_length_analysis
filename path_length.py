@@ -454,7 +454,8 @@ def path_length(
     )
     ```
     """
-    # read gds_lib
+    # read gds_lib 
+    # TODO : check gds_file_path exists
     gdstk_lib = gdstk.read_gds(gds_file)
     # get path_polygons and cutting polygons
     path_polygons, cutting_polygons = get_polygons(
@@ -470,7 +471,6 @@ def path_length(
     graph = get_nx_graph(df)
     # generate report for all paths
     report = get_paths_report(graph)
-    logging.info(f"report : {report}")
     return report
 
 
@@ -508,7 +508,7 @@ if __name__ == "__main__":
     logging.getLogger()
 
     time_start = time()
-    valid_path_lengths = path_length(**config_data)
-    logging.info(f"valid_path_lengths: \n {valid_path_lengths}")
+    path_length_report = path_length(**config_data)
+    logging.info(f"path_length_report: \n {path_length_report}")
     exc_time = time() - time_start
     logging.info(f"Execution time: {exc_time} sec")

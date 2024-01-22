@@ -1,5 +1,6 @@
-gds_file: gds_examples/test.gds
+#gds_file: gds_examples/test.gds
 #gds_file: gds_examples/full_example.gds
+gds_file: gds_examples/test_2.gds
 cell_name: chip_AA
 path_layer: 174
 path_dtype: 0
