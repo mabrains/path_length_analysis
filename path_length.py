@@ -20,6 +20,7 @@ from docopt import docopt
 from yaml import safe_load
 import pandas as pd
 import networkx as nx
+from functools import partial
 
 
 def get_length(poly: gdstk.Polygon) -> float:
@@ -133,7 +134,14 @@ def get_polygons(
         if condition1
     ]
     labels_points = [(label.origin) for label in labels]
-
+    labels_text = [(label.text) for label in labels]
+    # logging.info(f"labels_as_list : {labels_text}")
+    duplicate_labels = get_duplicates(labels_text)
+    if duplicate_labels:
+        logging.error(
+            f"found duplicate labels {duplicate_labels}, please make sure to name your cutting polygons with a unique name"
+        )
+        exit(1)
     # dict[text(str), polygon[gdstk.Polygon]]
     for polygon in cutting_polygons:
         for label, condition in zip(labels, gdstk.inside(labels_points, polygon)):
@@ -150,6 +158,16 @@ def get_polygons(
         cutting_polygons_per_path.append(valid_cutting_polygons)
 
     return path_polygons, cutting_polygons_per_path
+
+
+def get_duplicates(lst):
+    seen = set()
+    duplicates = []
+    for item in lst:
+        if item in seen:
+            duplicates.append(item)
+        seen.add(item)
+    return duplicates
 
 
 def _get_polygons(
@@ -256,7 +274,7 @@ def check_if_polygon_cuts_path(
     )
     ```
     """
-    return len(gdstk.boolean(polygon, path_polygons, "not")) == 2
+    return len(gdstk.boolean(polygon, path_polygons, "not")) > 1
 
 
 def split_polygon(
@@ -324,17 +342,29 @@ def construct_graph_data_frame(
     ```
     """
     records = []
-    for poly, cutting_polys in zip(path_polygons, cutting_polygons):
+    for i, (poly, cutting_polys) in enumerate(zip(path_polygons, cutting_polygons)):
         if cutting_polys:
-            labels = list(cutting_polys.keys())
+            cutting_polys = sorted_polygons_names(poly, cutting_polys)
+            labels = [f"poly{i}_start"] + list(cutting_polys.keys()) + [f"poly{i}_end"]
+            logging.info(labels)
             cutting_polys = list(cutting_polys.values())
-            for j, sub_poly in enumerate(split_polygon(poly, cutting_polys)[1:-1]):
+            for j, sub_poly in enumerate(split_polygon(poly, cutting_polys)):
                 node1 = f"{labels[j]}"
                 node2 = f"{labels[j+1]}"
                 length = get_length(sub_poly)
                 records.append([node1, node2, length])
     df = pd.DataFrame(records, columns=["node1", "node2", "length"])
     return df
+
+
+def _sort_function(path, cutting_poly):
+    return get_length(gdstk.boolean(path, cutting_poly, "not")[0])
+
+
+def sorted_polygons_names(path, cutting_polys):
+    sort_func = partial(_sort_function, path)
+    sorted_dict = dict(sorted(cutting_polys.items(), key=lambda item: sort_func(item[1])))
+    return sorted_dict
 
 
 def get_nx_graph(graph_data_frame: pd.DataFrame) -> nx.Graph:
@@ -454,7 +484,7 @@ def path_length(
     )
     ```
     """
-    # read gds_lib 
+    # read gds_lib
     # TODO : check gds_file_path exists
     gdstk_lib = gdstk.read_gds(gds_file)
     # get path_polygons and cutting polygons
