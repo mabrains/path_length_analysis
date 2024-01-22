@@ -278,7 +278,8 @@ def check_if_polygon_cuts_path(
     )
     ```
     """
-    return len(gdstk.boolean(polygon, path_polygons, "not")) == 2
+    splitted_polygons = gdstk.boolean(polygon, path_polygons, "not")
+    return len(splitted_polygons) > 1 or splitted_polygons[0] != polygon
 
 
 def split_polygon(
