@@ -21,6 +21,7 @@ from yaml import safe_load
 import pandas as pd
 import networkx as nx
 from functools import partial
+from itertools import chain
 
 
 def get_length(poly: gdstk.Polygon) -> float:
@@ -70,7 +71,7 @@ def get_polygons(
     cell_name: str | None = None,
     path_dtype: int = 0,
     cutting_dtype: int = 0,
-) -> tuple[list[gdstk.Polygon], list[dict[str, gdstk.Polygon]]]:
+) -> tuple[list[gdstk.Polygon], list[list[gdstk.Polygon]], list[list[gdstk.Label]]]:
     """
     Retrieve polygons representing paths and cutting regions based on input parameters.
 
@@ -110,9 +111,6 @@ def get_polygons(
     )
     ```
     """
-
-    polygon_labels_pairs: dict[str, gdstk.Polygon] = {}
-
     path_polygons, cutting_polygons, labels = _get_polygons(
         gdstk_lib, path_layer, cutting_layer, cell_name, path_dtype, cutting_dtype
     )
@@ -133,7 +131,7 @@ def get_polygons(
         )
         if condition1
     ]
-    labels_points = [(label.origin) for label in labels]
+
     labels_text = [(label.text) for label in labels]
     # logging.info(f"labels_as_list : {labels_text}")
     duplicate_labels = get_duplicates(labels_text)
@@ -142,22 +140,28 @@ def get_polygons(
             f"found duplicate labels {duplicate_labels}, please make sure to name your cutting polygons with a unique name"
         )
         exit(1)
-    # dict[text(str), polygon[gdstk.Polygon]]
+
+    labels_points = [label.origin for label in labels]
+    sorted_labels = []
     for polygon in cutting_polygons:
         for label, condition in zip(labels, gdstk.inside(labels_points, polygon)):
             if condition:
-                polygon_labels_pairs[label.text] = polygon
+                sorted_labels.append(label)
                 break
 
-    cutting_polygons_per_path: list[dict[str : gdstk.Polygon]] = []
+    cutting_polygons_per_path: list[list[gdstk.Polygon]] = []
+    cutting_labels_per_path: list[list[gdstk.Label]] = []
     for path_polygon in path_polygons:
-        valid_cutting_polygons = {}
-        for label, polygon in polygon_labels_pairs.items():
+        valid_cutting_polygons = []
+        valid_cutting_labels = []
+        for polygon, label in zip(cutting_polygons, sorted_labels):
             if check_if_polygon_cuts_path(polygon, [path_polygon]):
-                valid_cutting_polygons[label] = polygon
+                if gdstk.inside([label.origin], polygon):
+                    valid_cutting_polygons.append(polygon)
+                    valid_cutting_labels.append(label)
         cutting_polygons_per_path.append(valid_cutting_polygons)
-
-    return path_polygons, cutting_polygons_per_path
+        cutting_labels_per_path.append(valid_cutting_labels)
+    return path_polygons, cutting_polygons_per_path, cutting_labels_per_path
 
 
 def get_duplicates(lst):
@@ -274,7 +278,7 @@ def check_if_polygon_cuts_path(
     )
     ```
     """
-    return len(gdstk.boolean(polygon, path_polygons, "not")) > 1
+    return len(gdstk.boolean(polygon, path_polygons, "not")) == 2
 
 
 def split_polygon(
@@ -306,7 +310,9 @@ def split_polygon(
 
 
 def construct_graph_data_frame(
-    path_polygons: list[gdstk.Polygon], cutting_polygons: list[dict[str, gdstk.Polygon]]
+    path_polygons: list[gdstk.Polygon],
+    cutting_polygons: list[list[gdstk.Polygon]],
+    labels: list[list[gdstk.Label]],
 ) -> pd.DataFrame:
     """
     Construct a DataFrame representing graph data from path_polygons and cutting polygons.
@@ -342,41 +348,81 @@ def construct_graph_data_frame(
     ```
     """
     records = []
+    path_labels = move_labels_on_path(path_polygons, cutting_polygons, labels)
+    logging.info(f"moved labels : {[label.text for label in path_labels]}")
+    logging.info(f"{len(path_polygons),len(cutting_polygons),len(labels)}")
     for i, (poly, cutting_polys) in enumerate(zip(path_polygons, cutting_polygons)):
+        logging.info(f"{i,len(cutting_polys),len(labels[i])}")
+        tail_counter = 0
         if cutting_polys:
-            cutting_polys = sorted_polygons_names(poly, cutting_polys)
-            labels = [f"poly{i}_start"] + list(cutting_polys.keys()) + [f"poly{i}_end"]
-            logging.info(labels)
-            cutting_polys = list(cutting_polys.values())
-            for j, sub_poly in enumerate(split_polygon(poly, cutting_polys)):
-                node1 = f"{labels[j]}"
-                node2 = f"{labels[j+1]}"
+            splitted_polygons = split_polygon(poly, cutting_polys)
+            logging.info(f"polygon counter{i}")
+            logging.info(
+                f"len splitted polygons :{len(split_polygon(poly, cutting_polys))} "
+            )
+            logging.info(f"len cutting polygons :{len(cutting_polys)} ")
+
+            for sub_poly in splitted_polygons:
+                logging.info("touch")
+                node_names = get_node_names(sub_poly, path_labels)
+                logging.info(f"node names {node_names}")
+                if len(node_names) == 1:
+                    node1 = node_names[0]
+                    node2 = f"polygon_{i}_tail_{tail_counter}"
+                    tail_counter += 1
+                elif len(node_names) == 2:
+                    node1, node2 = node_names
+                else:
+                    logging.error(f"node_names {node_names}")
+                    continue
                 length = get_length(sub_poly)
+                logging.info(f"{[node1, node2, length]}")
                 records.append([node1, node2, length])
     df = pd.DataFrame(records, columns=["node1", "node2", "length"])
     return df
 
-def _min_max_labels(path:gdstk.Polygon,cutting_poly:gdstk.Polygon,text:str):
-    points = gdstk.boolean(path,cutting_poly,"and")[0].points
+
+def get_node_names(poly, labels: list[gdstk.Label]):
+    points = [label.origin for label in labels]
+    names = [label.text for label in labels]
+    node_names: list[str] = []
+    for name, condition in zip(names, gdstk.inside(points, poly)):
+        if condition:
+            node_names.append(name)
+    logging.info(f"condition : {gdstk.inside(points, poly)}")
+    logging.info(f"names: {names}")
+    logging.info(f"points : {points}")
+
+    return node_names
+
+
+def _min_max_labels(path: gdstk.Polygon, cutting_poly: gdstk.Polygon, text: str):
+    points = gdstk.boolean(path, cutting_poly, "and")[0].points
     x_values, y_values = zip(*points)
     xmin = min(x_values)
     ymin = min(y_values)
     xmax = max(x_values)
     ymax = max(y_values)
-    return gdstk.Label(text,origin=(xmin,ymin)), gdstk.Label(text,origin=(xmax,ymax))
-
-def move_labels_on_path(path:gdstk.Polygon, cutting_polys:dict[str,gdstk.Polygon]):
-    labels = [gdstk.Label() for label, cutting_poly  in cutting_polys.items()]
-    
-
-def _sort_function(path, cutting_poly):
-    return get_length(gdstk.boolean(path, cutting_poly, "not")[0])
+    logging.info(f"xmin:{xmin},xmax:{xmax},ymin{ymin},ymax{ymax}")
+    return [
+        gdstk.Label(text, origin=(xmin, ymin)),
+        gdstk.Label(text, origin=(xmax, ymax)),
+    ]
 
 
-def sorted_polygons_names(path, cutting_polys):
-    sort_func = partial(_sort_function, path)
-    sorted_dict = dict(sorted(cutting_polys.items(), key=lambda item: sort_func(item[1])))
-    return sorted_dict
+def move_labels_on_path(
+    path_polygons: list[gdstk.Polygon],
+    cutting_polygons: list[list[gdstk.Polygon]],
+    labels: list[list[gdstk.Label]],
+):
+    moved_labels = []
+    for path_poly, cutting_polys, labels in zip(
+        path_polygons, cutting_polygons, labels
+    ):
+        get_min_max_labels = partial(_min_max_labels, path_poly)
+        for poly, label in zip(cutting_polys, labels):
+            moved_labels += get_min_max_labels(poly, label.text)
+    return moved_labels
 
 
 def get_nx_graph(graph_data_frame: pd.DataFrame) -> nx.Graph:
@@ -500,7 +546,7 @@ def path_length(
     # TODO : check gds_file_path exists
     gdstk_lib = gdstk.read_gds(gds_file)
     # get path_polygons and cutting polygons
-    path_polygons, cutting_polygons = get_polygons(
+    path_polygons, cutting_polygons, labels = get_polygons(
         gdstk_lib=gdstk_lib,
         path_layer=path_layer,
         cutting_layer=cutting_layer,
@@ -509,7 +555,7 @@ def path_length(
         cutting_dtype=cutting_dtype,
     )
     # get networkx graph
-    df = construct_graph_data_frame(path_polygons, cutting_polygons)
+    df = construct_graph_data_frame(path_polygons, cutting_polygons, labels)
     graph = get_nx_graph(df)
     # generate report for all paths
     report = get_paths_report(graph)
