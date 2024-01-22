@@ -21,7 +21,6 @@ from yaml import safe_load
 import pandas as pd
 import networkx as nx
 from functools import partial
-from itertools import chain
 
 
 def get_length(poly: gdstk.Polygon) -> float:
@@ -84,95 +83,25 @@ def get_polygons(
     - cutting_dtype (int, optional): Data type for cutting regions. Defaults to 0.
 
     Returns:
-    tuple: A tuple containing two elements.
+    tuple: A tuple containing three elements.
         - List of path polygons (gdstk.Polygon).
-        - List of dictionaries, where each dictionary represents cutting polygons
-          corresponding to a path polygon. Keys are labels, and values are
-          corresponding cutting polygons (dict[str, gdstk.Polygon]).
+        - List of list of cutting polygons, where each list represents cutting polygons
+          corresponding to a path polygon (list[list[gdstk.Polygon]])
+        - List of list of cutting labels, where each list represents cutting labels
+          corresponding to a path polygon (list[list[gdstk.Polygon]])
 
     The function performs the following steps:
     1. Calls _get_polygons to obtain path polygons, cutting polygons, and labels.
-    2. Filters cutting polygons to include only those that intersect with path polygons.
+    2. Filters cutting polygons to include only valid polygons.
     3. Filters labels based on whether their origin is inside cutting polygons.
-    4. Creates a dictionary (polygon_labels_pairs) mapping labels to cutting polygons.
-    5. Generates a list of dictionaries (cutting_polygons_per_path) representing cutting
-       polygons for each path polygon.
-    6. Returns the list of path polygons and cutting polygons per path.
-
-    Example:
-    ```
-    path_polygons, cutting_polygons_per_path = get_polygons(
-        gdstk_lib=my_library,
-        path_layer=1,
-        cutting_layer=2,
-        cell_name="example",
-        path_dtype=0,
-        cutting_dtype=1
-    )
     ```
     """
     path_polygons, cutting_polygons, labels = _get_polygons(
         gdstk_lib, path_layer, cutting_layer, cell_name, path_dtype, cutting_dtype
     )
+    cutting_polygons, labels = filter_polygons(path_polygons, cutting_polygons, labels)
 
-    # filter cutting polygons
-    cutting_polygons = [
-        polygon
-        for polygon in cutting_polygons
-        if check_if_polygon_cuts_path(polygon, path_polygons)
-    ]
-
-    # filter labels
-    labels = [
-        label
-        for label, condition1 in zip(
-            labels,
-            gdstk.inside([label.origin for label in labels], cutting_polygons),
-        )
-        if condition1
-    ]
-
-    labels_text = [(label.text) for label in labels]
-    # logging.info(f"labels_as_list : {labels_text}")
-    duplicate_labels = get_duplicates(labels_text)
-    if duplicate_labels:
-        logging.error(
-            f"found duplicate labels {duplicate_labels}, please make sure to name your cutting polygons with a unique name"
-        )
-        exit(1)
-
-    labels_points = [label.origin for label in labels]
-    sorted_labels = []
-    for polygon in cutting_polygons:
-        for label, condition in zip(labels, gdstk.inside(labels_points, polygon)):
-            if condition:
-                sorted_labels.append(label)
-                break
-
-    cutting_polygons_per_path: list[list[gdstk.Polygon]] = []
-    cutting_labels_per_path: list[list[gdstk.Label]] = []
-    for path_polygon in path_polygons:
-        valid_cutting_polygons = []
-        valid_cutting_labels = []
-        for polygon, label in zip(cutting_polygons, sorted_labels):
-            logging.info(f"{label.text}")
-            if check_if_polygon_cuts_path(polygon, [path_polygon]):
-                if gdstk.inside([label.origin], polygon):
-                    valid_cutting_polygons.append(polygon)
-                    valid_cutting_labels.append(label)
-        cutting_polygons_per_path.append(valid_cutting_polygons)
-        cutting_labels_per_path.append(valid_cutting_labels)
-    return path_polygons, cutting_polygons_per_path, cutting_labels_per_path
-
-
-def get_duplicates(lst):
-    seen = set()
-    duplicates = []
-    for item in lst:
-        if item in seen:
-            duplicates.append(item)
-        seen.add(item)
-    return duplicates
+    return path_polygons, cutting_polygons, labels
 
 
 def _get_polygons(
@@ -253,6 +182,125 @@ def _get_polygons(
     return path_polygons, cutting_polygons, labels
 
 
+def filter_polygons(
+    path_polygons: list[gdstk.Polygon],
+    cutting_polygons: list[gdstk.Polygon],
+    labels: list[gdstk.Label],
+) -> tuple[list[list[gdstk.Polygon]], list[list[gdstk.Label]]]:
+    """
+    Filters cutting polygons and labels based on their relationship with path polygons.
+
+    Parameters:
+    - path_polygons (list[gdstk.Polygon]): List of path polygons.
+    - cutting_polygons (list[gdstk.Polygon]): List of cutting polygons.
+    - labels (list[gdstk.Label]): List of labels associated with cutting polygons.
+
+    Returns:
+    Tuple containing two filtered lists:
+    1. List of filtered cutting polygons.
+    2. List of filtered labels.
+
+    This function filters cutting polygons based on whether they intersect with any of
+    the path polygons. It also filters labels associated with the filtered cutting polygons.
+    Duplicate labels are checked, and an error is raised if duplicates are found.
+
+    Returns the rearranged data as a tuple of lists:
+    - List of lists of cutting polygons per path polygon.
+    - List of lists of labels per path polygon.
+    """
+    # filter cutting polygons
+    cutting_polygons = [
+        polygon
+        for polygon in cutting_polygons
+        if check_if_polygon_cuts_path(polygon, path_polygons)
+    ]
+
+    # filter labels
+    labels = [
+        label
+        for label, condition1 in zip(
+            labels,
+            gdstk.inside([label.origin for label in labels], cutting_polygons),
+        )
+        if condition1
+    ]
+
+    labels_text = [(label.text) for label in labels]
+    # logging.info(f"labels_as_list : {labels_text}")
+    duplicate_labels = get_duplicates(labels_text)
+    if duplicate_labels:
+        logging.error(
+            f"found duplicate labels {duplicate_labels}, please make sure to name your cutting polygons with a unique name"
+        )
+        exit(1)
+
+    return _rearrange_data(path_polygons, cutting_polygons, labels)
+
+
+def _rearrange_data(
+    path_polygons: list[gdstk.Polygon],
+    cutting_polygons: list[gdstk.Polygon],
+    labels: list[gdstk.Label],
+) -> tuple[list[list[gdstk.Polygon]], list[list[gdstk.Label]]]:
+    """
+    Rearranges data by associating cutting polygons and labels with path polygons.
+
+    Parameters:
+    - path_polygons (list[gdstk.Polygon]): List of path polygons.
+    - cutting_polygons (list[gdstk.Polygon]): List of cutting polygons.
+    - labels (list[gdstk.Label]): List of labels associated with cutting polygons.
+
+    Returns:
+    Tuple containing two lists:
+    1. List of lists of cutting polygons per path polygon.
+    2. List of lists of labels per path polygon.
+    """
+    labels_points = [label.origin for label in labels]
+    sorted_labels: list[gdstk.Label] = []
+    for polygon in cutting_polygons:
+        for label, condition in zip(labels, gdstk.inside(labels_points, polygon)):
+            if condition:
+                sorted_labels.append(label)
+                break
+
+    cutting_polygons_per_path: list[list[gdstk.Polygon]] = []
+    cutting_labels_per_path: list[list[gdstk.Label]] = []
+    for path_polygon in path_polygons:
+        valid_cutting_polygons = []
+        valid_cutting_labels = []
+        for polygon, label in zip(cutting_polygons, sorted_labels):
+            if check_if_polygon_cuts_path(polygon, [path_polygon]):
+                if gdstk.inside([label.origin], polygon):
+                    valid_cutting_polygons.append(polygon)
+                    valid_cutting_labels.append(label)
+        cutting_polygons_per_path.append(valid_cutting_polygons)
+        cutting_labels_per_path.append(valid_cutting_labels)
+    return cutting_polygons_per_path, cutting_labels_per_path
+
+
+def get_duplicates(lst: list) -> list:
+    """
+    Finds and returns duplicate elements in a list.
+
+    Parameters:
+    - lst (list): The input list to check for duplicates.
+
+    Returns:
+    list: A list containing the duplicate elements found in the input list.
+
+    Example:
+    duplicates = get_duplicates([1, 2, 2, 3, 4, 4, 5])
+    # Result: [2, 4]
+    """
+    seen = set()
+    duplicates = []
+    for item in lst:
+        if item in seen:
+            duplicates.append(item)
+        seen.add(item)
+    return duplicates
+
+
 def check_if_polygon_cuts_path(
     polygon: gdstk.Polygon, path_polygons: list[gdstk.Polygon]
 ) -> bool:
@@ -268,16 +316,9 @@ def check_if_polygon_cuts_path(
 
     The function performs the following steps:
     1. Calculates the boolean operation 'not' between the given polygon and the set of path polygons.
-    2. Returns True if the length of the result is 2, indicating that the polygon cuts through the paths.
-       Otherwise, returns False.
-
-    Example:
-    ```
-    is_cutting = check_if_polygon_cuts_path(
-        polygon=my_polygon,
-        path_polygons=[path1, path2, path3]
-    )
-    ```
+    2. Checks if the length of the resulting polygons is greater than 1, indicating cutting through paths.
+    3. Handles cases where the boolean operations 'or' and 'not' yield the same result(invalid cut).
+    4. Handles cases where the cutting polygon is on the path end.
     """
     splitted_polygons = gdstk.boolean(polygon, path_polygons, "not")
     if splitted_polygons:
@@ -330,9 +371,9 @@ def construct_graph_data_frame(
 
     Parameters:
     - path_polygons (list[gdstk.Polygon]): List of path polygons.
-    - cutting_polygons (list[dict[str, gdstk.Polygon]]): List of dictionaries,
-      where each dictionary represents cutting polygons corresponding to a path polygon.
-      Keys are labels, and values are corresponding cutting polygons.
+    - cutting_polygons (list[list[gdstk.Polygon]]): List of lists,
+      where each list represents cutting polygons corresponding to a path polygon.
+    - labels (list[list[gdstk.Label]]): List of lists of labels associated with cutting polygons.
 
     Returns:
     pd.DataFrame: DataFrame with columns 'node1', 'node2', and 'length' representing
@@ -340,43 +381,30 @@ def construct_graph_data_frame(
 
     The function performs the following steps:
     1. Iterates over path_polygons, cutting_polygons.items() to process each path and its cutting polygons.
-    2. For each pair of adjacent cutting polygons, extracts node1, node2, and the length of the connecting segment.
-    3. Appends records (node1, node2, length) to a list.
-    4. Constructs a DataFrame from the list of records.
-    5. Logs the resulting DataFrame for debugging purposes.
+    2. splits path_polygon with cutting_polygons.
+    3. For each sub_polygon, extracts node1, node2, and length.
+    4. Appends records (node1, node2, length) to a list.
+    5. Constructs a DataFrame from the list of records.
     6. Returns the constructed DataFrame.
 
-    Example:
+    The resulting DataFrame might look like:
     ```
-    graph_df = construct_graph_data_frame(
-        path_polygons=[path1, path2, path3],
-        cutting_polygons={
-            "label1": cutting_poly1,
-            "label2": cutting_poly2,
-            "label3": cutting_poly3
-        }
-    )
+        node1               node2        length
+    0   label1_tail_0       node_1         10.0
+    1   node_1              node_2         15.0
+    2   node_2          polygon_0_tail_1   12.0
+    3   polygon_1_tail_0    node_4         8.0
+    4   node_4          polygon_1_tail_1   20.0
     ```
     """
     records = []
     path_labels = move_labels_on_path(path_polygons, cutting_polygons, labels)
-    logging.info(f"moved labels : {[label.text for label in path_labels]}")
-    logging.info(f"{len(path_polygons),len(cutting_polygons),len(labels)}")
     for i, (poly, cutting_polys) in enumerate(zip(path_polygons, cutting_polygons)):
-        logging.info(f"{i,len(cutting_polys),len(labels[i])}")
         tail_counter = 0
         if cutting_polys:
             splitted_polygons = split_polygon(poly, cutting_polys)
-            logging.info(f"polygon counter{i}")
-            logging.info(
-                f"len splitted polygons :{len(split_polygon(poly, cutting_polys))} "
-            )
-            logging.info(f"len cutting polygons :{len(cutting_polys)} ")
-
             for sub_poly in splitted_polygons:
-                logging.info("touch")
                 node_names = get_node_names(sub_poly, path_labels)
-                logging.info(f"node names {node_names}")
                 if len(node_names) == 1:
                     node1 = node_names[0]
                     node2 = f"polygon_{i}_tail_{tail_counter}"
@@ -384,42 +412,64 @@ def construct_graph_data_frame(
                 elif len(node_names) == 2:
                     node1, node2 = node_names
                 else:
-                    logging.error(f"node_names {node_names}")
                     continue
                 length = get_length(sub_poly)
-                logging.info(f"{[node1, node2, length]}")
                 records.append([node1, node2, length])
     df = pd.DataFrame(records, columns=["node1", "node2", "length"])
     return df
 
 
-def get_node_names(poly, labels: list[gdstk.Label]):
+def get_node_names(poly, labels: list[gdstk.Label]) -> list[str]:
+    """
+    Get unique node names associated with a polygon based on label positions.
+
+    Parameters:
+    - poly (gdstk.Polygon): The polygon for which node names are determined.
+    - labels (list[gdstk.Label]): List of labels associated with the polygon.
+
+    Returns:
+    list[str]: List of unique node names associated with the polygon.
+
+    The function performs the following steps:
+    1. Extracts points and corresponding names from the given list of labels.
+    2. Iterates through each name and condition in a zip of names and whether points are inside the polygon.
+    3. Appends names to the list 'node_names' if the corresponding condition is True.
+    4. Returns a list containing unique node names.
+
+    Example:
+    ```
+    polygon = gdstk.Polygon(...)
+    labels = [label1, label2, label3]
+    node_names = get_node_names(polygon, labels)
+    # Result: ['node1', 'node2']
+    ```
+    """
     points = [label.origin for label in labels]
     names = [label.text for label in labels]
     node_names: list[str] = []
     for name, condition in zip(names, gdstk.inside(points, poly)):
         if condition:
             node_names.append(name)
-    logging.info(f"condition : {gdstk.inside(points, poly)}")
-    logging.info(f"names: {names}")
-    logging.info(f"points : {points}")
-
     return list(set(node_names))
 
 
-def _min_max_labels(path: gdstk.Polygon, cutting_poly: gdstk.Polygon, text: str):
-    logging.info(text)
-    logging.info(path)
-    logging.info(cutting_poly)
-    logging.info(gdstk.boolean(path, cutting_poly, "and"))
+def _get_path_labels(
+    path: gdstk.Polygon, cutting_poly: gdstk.Polygon, text: str
+) -> list[gdstk.Label]:
+    """
+    Create labels with a specified text at the vertices of the intersection
+    between a path polygon and a cutting polygon.
+
+    Parameters:
+    - path (gdstk.Polygon): The path polygon.
+    - cutting_poly (gdstk.Polygon): The cutting polygon.
+    - text (str): The text to be assigned to the labels.
+
+    Returns:
+    list[gdstk.Label]: List of labels with the specified text at the vertices
+    of the intersection between the path and cutting polygons.
+    """
     points = gdstk.boolean(path, cutting_poly, "and")[0].points
-    x_values, y_values = zip(*points)
-    # logging.info(f"x: {x_values},\n  y:{y_values}")
-    xmin = min(x_values)
-    ymin = min(y_values)
-    xmax = max(x_values)
-    ymax = max(y_values)
-    logging.info(f"xmin:{xmin},xmax:{xmax},ymin{ymin},ymax{ymax}")
     return [gdstk.Label(text, origin=point) for point in points]
 
 
@@ -427,14 +477,32 @@ def move_labels_on_path(
     path_polygons: list[gdstk.Polygon],
     cutting_polygons: list[list[gdstk.Polygon]],
     labels: list[list[gdstk.Label]],
-):
+) -> list[gdstk.Label]:
+    """
+    Create labels with a specified text at the vertices of the intersection
+    between a path polygon and a cutting polygon.
+
+    Parameters:
+    - path_polygons (list[gdstk.Polygon]): List of path polygons.
+    - cutting_polygons (list[list[gdstk.Polygon]]): List of lists containing cutting polygons corresponding to each path.
+    - labels (list[list[gdstk.Label]]): List of lists containing labels associated with cutting polygons.
+
+    Returns:
+    list[gdstk.Label]: List of path_labels.
+
+    The function performs the following steps:
+    1. Iterates over each path polygon, its cutting polygons, and associated labels.
+    2. For each cutting polygon and label, computes the labels along the path based on the vertices of the intersection.
+    3. Appends the calculated labels to the 'moved_labels' list.
+    4. Returns the list of moved labels.
+    """
     moved_labels = []
     for path_poly, cutting_polys, labels in zip(
         path_polygons, cutting_polygons, labels
     ):
-        get_min_max_labels = partial(_min_max_labels, path_poly)
+        get_path_labels = partial(_get_path_labels, path_poly)
         for poly, label in zip(cutting_polys, labels):
-            moved_labels += get_min_max_labels(poly, label.text)
+            moved_labels += get_path_labels(poly, label.text)
     return moved_labels
 
 
@@ -556,7 +624,9 @@ def path_length(
     ```
     """
     # read gds_lib
-    # TODO : check gds_file_path exists
+    if not os.path.isfile(gds_file):
+        logging.error(f"{gds_file} file can't be found")
+        exit(1)
     gdstk_lib = gdstk.read_gds(gds_file)
     # get path_polygons and cutting polygons
     path_polygons, cutting_polygons, labels = get_polygons(
