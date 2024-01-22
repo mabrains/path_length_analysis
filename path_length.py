@@ -356,6 +356,18 @@ def construct_graph_data_frame(
     df = pd.DataFrame(records, columns=["node1", "node2", "length"])
     return df
 
+def _min_max_labels(path:gdstk.Polygon,cutting_poly:gdstk.Polygon,text:str):
+    points = gdstk.boolean(path,cutting_poly,"and")[0].points
+    x_values, y_values = zip(*points)
+    xmin = min(x_values)
+    ymin = min(y_values)
+    xmax = max(x_values)
+    ymax = max(y_values)
+    return gdstk.Label(text,origin=(xmin,ymin)), gdstk.Label(text,origin=(xmax,ymax))
+
+def move_labels_on_path(path:gdstk.Polygon, cutting_polys:dict[str,gdstk.Polygon]):
+    labels = [gdstk.Label() for label, cutting_poly  in cutting_polys.items()]
+    
 
 def _sort_function(path, cutting_poly):
     return get_length(gdstk.boolean(path, cutting_poly, "not")[0])
