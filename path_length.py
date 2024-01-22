@@ -155,6 +155,7 @@ def get_polygons(
         valid_cutting_polygons = []
         valid_cutting_labels = []
         for polygon, label in zip(cutting_polygons, sorted_labels):
+            logging.info(f"{label.text}")
             if check_if_polygon_cuts_path(polygon, [path_polygon]):
                 if gdstk.inside([label.origin], polygon):
                     valid_cutting_polygons.append(polygon)
@@ -279,7 +280,16 @@ def check_if_polygon_cuts_path(
     ```
     """
     splitted_polygons = gdstk.boolean(polygon, path_polygons, "not")
-    return len(splitted_polygons) > 1 or splitted_polygons[0] != polygon
+    if splitted_polygons:
+        if len(splitted_polygons) > 1:
+            return True
+        if (
+            gdstk.boolean(polygon, path_polygons, "or").__str__()
+            == gdstk.boolean(polygon, path_polygons, "not").__str__()
+        ):
+            return False
+        return get_length(splitted_polygons[0]) != get_length(polygon)
+    return False
 
 
 def split_polygon(
@@ -398,17 +408,19 @@ def get_node_names(poly, labels: list[gdstk.Label]):
 
 
 def _min_max_labels(path: gdstk.Polygon, cutting_poly: gdstk.Polygon, text: str):
+    logging.info(text)
+    logging.info(path)
+    logging.info(cutting_poly)
+    logging.info(gdstk.boolean(path, cutting_poly, "and"))
     points = gdstk.boolean(path, cutting_poly, "and")[0].points
     x_values, y_values = zip(*points)
-    #logging.info(f"x: {x_values},\n  y:{y_values}")
+    # logging.info(f"x: {x_values},\n  y:{y_values}")
     xmin = min(x_values)
     ymin = min(y_values)
     xmax = max(x_values)
     ymax = max(y_values)
     logging.info(f"xmin:{xmin},xmax:{xmax},ymin{ymin},ymax{ymax}")
-    return [
-        gdstk.Label(text, origin=point) for point in points
-    ]
+    return [gdstk.Label(text, origin=point) for point in points]
 
 
 def move_labels_on_path(
