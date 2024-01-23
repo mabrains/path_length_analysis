@@ -28,7 +28,7 @@ Usage:
 Options:
     --help -h                    Print this help message.
     --config=<param>             Yaml file contains the measurements parameters
-    --run_dir=<run_dir_path>     Run directory to save all the results [default: pwd]
+    --run_dir=<run_dir_path>     directory to save all the results [default: pwd]
 """
 
 
