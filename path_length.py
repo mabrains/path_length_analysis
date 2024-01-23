@@ -43,6 +43,7 @@ import yaml
 import pandas as pd
 import networkx as nx
 from functools import partial
+from typing import Any
 
 
 def get_length(poly: gdstk.Polygon) -> float:
@@ -88,22 +89,18 @@ def get_length(poly: gdstk.Polygon) -> float:
 
 def get_polygons(
     gdstk_lib: gdstk.Library,
-    path_layer: int,
-    cutting_layer: int,
+    path_layer: tuple[int, int],
+    cutting_layer: tuple[int, int],
     cell_name: str | None = None,
-    path_dtype: int = 0,
-    cutting_dtype: int = 0,
 ) -> tuple[list[gdstk.Polygon], list[list[gdstk.Polygon]], list[list[gdstk.Label]]]:
     """
     Retrieve polygons representing paths and cutting regions based on input parameters.
 
     Parameters:
     - gdstk_lib (gdstk.Library): The gdstk.Library containing the desired cell.
-    - path_layer (int): Layer number for paths.
-    - cutting_layer (int): Layer number for cutting polygons.
+    - path_layer (tuple[int, int]): Layer number and dtype for paths polygons.
+    - cutting_layer (tuple[int, int]): Layer number and dtype for cutting polygons.
     - cell_name (str, optional): Name of the cell. Defaults to None.
-    - path_dtype (int, optional): Data type for paths. Defaults to 0.
-    - cutting_dtype (int, optional): Data type for cutting regions. Defaults to 0.
 
     Returns:
     tuple: A tuple containing three elements.
@@ -120,7 +117,7 @@ def get_polygons(
     ```
     """
     path_polygons, cutting_polygons, labels = _get_polygons(
-        gdstk_lib, path_layer, cutting_layer, cell_name, path_dtype, cutting_dtype
+        gdstk_lib, path_layer, cutting_layer, cell_name
     )
     cutting_polygons, labels = filter_polygons(path_polygons, cutting_polygons, labels)
     return path_polygons, cutting_polygons, labels
@@ -128,22 +125,18 @@ def get_polygons(
 
 def _get_polygons(
     gdstk_lib: gdstk.Library,
-    path_layer: int,
-    cutting_layer: int,
+    path_layer: tuple[int, int],
+    cutting_layer: tuple[int, int],
     cell_name: str | None = None,
-    path_dtype: int = 0,
-    cutting_dtype: int = 0,
 ) -> tuple[gdstk.Polygon, gdstk.Polygon, list[gdstk.Label]]:
     """
     Retrieve polygons representing paths and cutting regions from a gdstk.Library.
 
     Parameters:
     - gdstk_lib (gdstk.Library): The gdstk.library containing the desired cell.
-    - path_layer (int): Layer number for paths.
-    - cutting_layer (int): Layer number for cutting regions.
+    - path_layer (tuple[int, int]): Layer number and dtype for paths polygons.
+    - cutting_layer (tuple[int, int]): Layer number and dtype for cutting polygons.
     - cell_name (str, optional): Name of the cell. Defaults to None.
-    - path_dtype (int, optional): Data type for paths. Defaults to 0.
-    - cutting_dtype (int, optional): Data type for cutting regions. Defaults to 0.
 
     Returns:
     tuple: A tuple containing three elements.
@@ -160,18 +153,6 @@ def _get_polygons(
     6. Merges path polygons using gdstk.boolean with "or" operation.
     7. Retrieves cutting polygons and labels from the selected cell based on layer and datatype.
     8. Returns path polygons, cutting polygons, and labels.
-
-    Example:
-    ```
-    path_polygons, cutting_polygons, labels = _get_polygons(
-        gdstk_lib=my_library,
-        path_layer=1,
-        cutting_layer=2,
-        cell_name="example",
-        path_dtype=0,
-        cutting_dtype=1
-    )
-    ```
     """
     cells = gdstk_lib.top_level()
     if len(cells) < 1:
@@ -195,12 +176,16 @@ def _get_polygons(
         logging.error("Invalid cell name")
         exit(1)
 
-    path_polygons = cell.get_polygons(depth=None, layer=path_layer, datatype=path_dtype)
+    path_polygons = cell.get_polygons(
+        depth=None, layer=path_layer[0], datatype=path_layer[1]
+    )
     path_polygons = gdstk.boolean(path_polygons, path_polygons, "or")
     cutting_polygons = cell.get_polygons(
-        depth=None, layer=cutting_layer, datatype=cutting_dtype
+        depth=None, layer=cutting_layer[0], datatype=cutting_layer[1]
     )
-    labels = cell.get_labels(depth=None, layer=cutting_layer, texttype=cutting_dtype)
+    labels = cell.get_labels(
+        depth=None, layer=cutting_layer[0], texttype=cutting_layer[1]
+    )
     return path_polygons, cutting_polygons, labels
 
 
@@ -614,24 +599,37 @@ def get_paths_report(graph: nx.Graph) -> pd.DataFrame:
     return report
 
 
+def filter_path_report(report: pd.DataFrame, nodes: list[str]) -> pd.DataFrame:
+    """
+    Filter a DataFrame based on specified nodes in the 'node1' and 'node2' columns.
+
+    Parameters:
+    - report (pd.DataFrame): The input DataFrame containing a network report.
+    - nodes (list[str]): A list of nodes to filter the DataFrame by.
+
+    Returns:
+    - pd.DataFrame: A filtered DataFrame containing rows where either 'node1' or 'node2' matches
+        any node in the specified list.
+    """
+    return report[report["node1"].isin(nodes) & report["node2"].isin(nodes)]
+
+
 def path_length(
     gds_file: str,
-    path_layer: int,
-    cutting_layer: int,
+    path_layer: list[int],
+    cutting_layer: list[int],
     cell_name: str | None = None,
-    path_dtype: int = 0,
-    cutting_dtype: int = 0,
+    nodes: list[str] = [],
 ) -> pd.DataFrame:
     """
     Calculate the shortest path lengths between cutting polygons on paths in a gds file.
 
     Parameters:
     - gds_file (str): The path to the gds file.
-    - path_layer (int): Layer number for paths.
-    - cutting_layer (int): Layer number for cutting regions.
+    - path_layer (tuple[int, int]): Layer number and dtype for paths.
+    - cutting_layer (tuple[int, int]): Layer number and dtype for cutting regions.
     - cell_name (str, optional): Name of the cell. Defaults to None.
-    - path_dtype (int, optional): Data type for paths. Defaults to 0.
-    - cutting_dtype (int, optional): Data type for cutting regions. Defaults to 0.
+    - nodes (list[str], optional): list of node names to consider for path length report.
 
     Returns:
     pd.DataFrame: DataFrame containing information about shortest path lengths
@@ -650,11 +648,10 @@ def path_length(
     gds_file_path = "path/to/your/file.gds"
     lengths_df = path_length(
         gds_file=gds_file_path,
-        path_layer=1,
-        cutting_layer=2,
+        path_layer=(1,0),
+        cutting_layer=(2,0),
         cell_name="example",
-        path_dtype=0,
-        cutting_dtype=1
+        nodes=['start','mid','stop']
     )
     ```
     """
@@ -669,18 +666,18 @@ def path_length(
         path_layer=path_layer,
         cutting_layer=cutting_layer,
         cell_name=cell_name,
-        path_dtype=path_dtype,
-        cutting_dtype=cutting_dtype,
     )
     # get networkx graph
     df = construct_graph_data_frame(path_polygons, cutting_polygons, labels)
     graph = get_nx_graph(df)
     # generate report for all paths
     report = get_paths_report(graph)
+    if nodes:
+        return filter_path_report(report, nodes)
     return report
 
 
-def read_yaml(yaml_file):
+def read_yaml(yaml_file: str) -> dict[str, Any]:
     """
     Reading yaml file and saving the data to dictionary
 
@@ -740,6 +737,11 @@ if __name__ == "__main__":
         format="%(asctime)s | %(levelname)-7s | %(message)s",
         datefmt="%d-%b-%Y %H:%M:%S",
     )
+
+    # set pandas options
+    pd.set_option("display.max_rows", None)
+
+    # reading config file
     config_data = read_yaml(config_in)
 
     # Calling the main function

@@ -22,7 +22,14 @@
 gds_file: gds_examples/test.gds
 cell_name: nsss
 cell_name: chip_AA
-path_layer: 174
-path_dtype: 0
-cutting_layer: 1000
-cutting_dtype: 0
+path_layer: 
+  - 174
+  - 0
+cutting_layer:
+  - 1000
+  - 0
+nodes: 
+  - rect1
+  - rect2
+  - start
+  - mid
