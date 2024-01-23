@@ -1,12 +1,14 @@
 #### Add license #####
+"""
+Run Path Length Measurements.
 
-"""Usage: path_length.py <config_file_path> [-h]
-
-Arguments:
-  <config_file_path>  Path to the config.yaml file.
+Usage:
+  path_length.py  --config=<param> [--run_dir=<run_dir_path>]
 
 Options:
-  -h --help          Show this help message and exit.
+    --help -h                    Print this help message.
+    --config=<param>             Yaml file contains the measurements parameters
+    --run_dir=<run_dir_path>     Run directory to save all the results [default: pwd]
 """
 
 
@@ -14,10 +16,10 @@ import gdstk
 import logging
 import os
 from datetime import datetime
-from time import time
+import time
 from math import sqrt
 from docopt import docopt
-from yaml import safe_load
+import yaml
 import pandas as pd
 import networkx as nx
 from functools import partial
@@ -648,41 +650,74 @@ def path_length(
     return report
 
 
+def read_yaml(yaml_file):
+    """
+    Reading yaml file and saving the data to dictionary
+
+    Args:
+        yaml_file (str): yaml file path
+
+    Returns:
+        yaml_dic (dict): contains all the yaml file data
+    """
+
+    # load yaml config data
+    with open(yaml_file, "r") as stream:
+        try:
+            yaml_dic = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            logging.error(exc)
+
+    return yaml_dic
+
+
 if __name__ == "__main__":
-    args = docopt(__doc__)
-    config_file_path = args["<config_file_path>"]
-    if not os.path.isfile(config_file_path):
-        logging.error(f"{config_file_path} file can't be found")
+    # arguments
+    arguments = docopt(__doc__, version="RUN Path Length: 1.0")
+
+    # logs format
+    now_str = datetime.utcnow().strftime("length_run_%Y_%m_%d_%H_%M_%S")
+
+    # checking config file existance
+    config_in = arguments["--config"]
+    if not os.path.exists(config_in):
+        logging.error(f"The configuration file {config_in} doesn't exist, please check")
         exit(1)
 
-    try:
-        with open(config_file_path) as f:
-            config_data = safe_load(f)
-    except Exception as e:
-        logging.error(
-            f"failed to read config file  {config_file_path}, \n Error messege: {e} "
-        )
-        exit(1)
+    if (
+        arguments["--run_dir"] == "pwd"
+        or arguments["--run_dir"] == ""
+        or arguments["--run_dir"] is None
+    ):
+        run_dir = os.path.join(os.path.abspath(os.getcwd()), now_str)
+    else:
+        run_dir = os.path.abspath(arguments["--run_dir"])
 
-    if not os.path.exists("logs/"):
-        os.mkdir("logs/")
+    # checking run_dir existance & creation
+    if not os.path.isdir(run_dir):
+        os.makedirs(run_dir, exist_ok=True)
+    else:
+        # shutil.rmtree(run_dir)
+        os.makedirs(run_dir, exist_ok=True)
 
-    now_str = datetime.utcnow().strftime("%Y_%m_%d_%H_%M_%S")
+    # logs setup
     logging.basicConfig(
         level=logging.DEBUG,
         handlers=[
-            logging.FileHandler(
-                f"logs/{config_data['gds_file'].split('/')[-1].split('.')[0]}_{now_str}.log"
-            ),
+            logging.FileHandler(os.path.join(run_dir, "{}.log".format(now_str))),
             logging.StreamHandler(),
         ],
         format="%(asctime)s | %(levelname)-7s | %(message)s",
         datefmt="%d-%b-%Y %H:%M:%S",
     )
-    logging.getLogger()
+    config_data = read_yaml(config_in)
 
-    time_start = time()
+    # Calling the main function
+    time_start = time.time()
     path_length_report = path_length(**config_data)
     logging.info(f"path_length_report: \n {path_length_report}")
-    exc_time = time() - time_start
-    logging.info(f"Execution time: {exc_time} sec")
+
+    exc_time = time.time() - time_start
+
+    # Reporting execution time
+    logging.info(f"Path length execution time: {exc_time} sec")
