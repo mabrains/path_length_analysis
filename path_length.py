@@ -100,7 +100,6 @@ def get_polygons(
         gdstk_lib, path_layer, cutting_layer, cell_name, path_dtype, cutting_dtype
     )
     cutting_polygons, labels = filter_polygons(path_polygons, cutting_polygons, labels)
-
     return path_polygons, cutting_polygons, labels
 
 
@@ -226,7 +225,6 @@ def filter_polygons(
     ]
 
     labels_text = [(label.text) for label in labels]
-    # logging.info(f"labels_as_list : {labels_text}")
     duplicate_labels = get_duplicates(labels_text)
     if duplicate_labels:
         logging.error(
@@ -262,15 +260,14 @@ def _rearrange_data(
             if condition:
                 sorted_labels.append(label)
                 break
-
     cutting_polygons_per_path: list[list[gdstk.Polygon]] = []
     cutting_labels_per_path: list[list[gdstk.Label]] = []
     for path_polygon in path_polygons:
         valid_cutting_polygons = []
         valid_cutting_labels = []
         for polygon, label in zip(cutting_polygons, sorted_labels):
-            if check_if_polygon_cuts_path(polygon, [path_polygon]):
-                if gdstk.inside([label.origin], polygon):
+            if check_if_polygon_cuts_path(polygon, path_polygon):
+                if polygon.contain(label.origin):
                     valid_cutting_polygons.append(polygon)
                     valid_cutting_labels.append(label)
         cutting_polygons_per_path.append(valid_cutting_polygons)
@@ -317,19 +314,15 @@ def check_if_polygon_cuts_path(
     The function performs the following steps:
     1. Calculates the boolean operation 'not' between the given polygon and the set of path polygons.
     2. Checks if the length of the resulting polygons is greater than 1, indicating cutting through paths.
-    3. Handles cases where the boolean operations 'or' and 'not' yield the same result(invalid cut).
+    3. Handles cases where the boolean operations 'and' yields empty list.(not on path).
     4. Handles cases where the cutting polygon is on the path end.
+        (if any vertix is inside the path it will be considered invalid cut).
     """
-    splitted_polygons = gdstk.boolean(polygon, path_polygons, "not")
-    if splitted_polygons:
-        if len(splitted_polygons) > 1:
-            return True
-        if (
-            gdstk.boolean(polygon, path_polygons, "or").__str__()
-            == gdstk.boolean(polygon, path_polygons, "not").__str__()
-        ):
-            return False
-        return get_length(splitted_polygons[0]) != get_length(polygon)
+    splitted_polygons = gdstk.boolean(path_polygons, polygon, "not")
+    if len(splitted_polygons) > 1:
+        return True
+    if len(splitted_polygons) == 1 and gdstk.boolean(path_polygons, polygon, "and"):
+        return not gdstk.any_inside(polygon.points, path_polygons)
     return False
 
 
@@ -469,7 +462,13 @@ def _get_path_labels(
     list[gdstk.Label]: List of labels with the specified text at the vertices
     of the intersection between the path and cutting polygons.
     """
-    points = gdstk.boolean(path, cutting_poly, "and")[0].points
+
+    intersection = gdstk.boolean(cutting_poly, path, "and")
+    if intersection:
+        points = intersection[0].points
+    else:
+        logging.error(f"failed to find intersection between {cutting_poly}, and {path}")
+        exit(1)
     return [gdstk.Label(text, origin=point) for point in points]
 
 
@@ -500,9 +499,9 @@ def move_labels_on_path(
     for path_poly, cutting_polys, labels in zip(
         path_polygons, cutting_polygons, labels
     ):
-        get_path_labels = partial(_get_path_labels, path_poly)
+        get_path_labels = partial(_get_path_labels, path=path_poly)
         for poly, label in zip(cutting_polys, labels):
-            moved_labels += get_path_labels(poly, label.text)
+            moved_labels += get_path_labels(cutting_poly=poly, text=label.text)
     return moved_labels
 
 
@@ -567,6 +566,10 @@ def get_paths_report(graph: nx.Graph) -> pd.DataFrame:
                 except nx.NetworkXNoPath:
                     path_length = -1
                 records.append([start_node, end_node, path_length])
+    if not records:
+        logging.error(f"no_nodes detected : {records}")
+        exit(1)
+
     report = pd.DataFrame(records)
     report.columns = ["node1", "node2", "length"]
     # Sort values in each row and create a new sorted column
