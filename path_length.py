@@ -1,4 +1,24 @@
-#### Add license #####
+# SPDX-FileCopyrightText: 2024 Mabrains Company
+# Licensed under the GNU GENERAL PUBLIC License, Version 3.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+#                    GNU GENERAL PUBLIC LICENSE
+#                       Version 3, 29 June 2007
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# SPDX-License-Identifier: GPL-3.0
+
 """
 Run Path Length Measurements.
 
@@ -40,7 +60,8 @@ def get_length(poly: gdstk.Polygon) -> float:
                     indicating no real solution for the length with the given area and perimeter.
 
     Note:
-        The area and perimeter are calculated using the gdstk library methods `area()` and `perimeter()`.
+        The area and perimeter are calculated using the gdstk library
+        methods `area()` and `perimeter()`.
         The discriminant is rounded to 12 decimal places to avoid precision issues.
         If a negative value in the square root is detected, an error is logged,
         and a ValueError is raised.
@@ -56,7 +77,7 @@ def get_length(poly: gdstk.Polygon) -> float:
 
     if discriminant < 0:
         logging.error(
-            f"area = {area}, perimeter = {perimeter}, negative value {discriminant} in sqrt detected"
+            f"area = {area}, perimeter = {perimeter}, negative value {discriminant} in sqrt"
         )
         raise ValueError(
             "Invalid input: No real solution for the length with the given area and perimeter"
@@ -230,7 +251,10 @@ def filter_polygons(
     duplicate_labels = get_duplicates(labels_text)
     if duplicate_labels:
         logging.error(
-            f"found duplicate labels {duplicate_labels}, please make sure to name your cutting polygons with a unique name"
+            (
+                f"found duplicate labels {duplicate_labels},"
+                "please make sure to name your cutting polygons with a unique name"
+            )
         )
         exit(1)
 
@@ -311,11 +335,14 @@ def check_if_polygon_cuts_path(
     - path_polygons (list[gdstk.Polygon]): List of path polygons to check against.
 
     Returns:
-    bool: True if the given polygon cuts through any polygon of the set of path polygons, False otherwise.
+    bool: True if the given polygon cuts through any polygon of the set of path polygons,
+        False otherwise.
 
     The function performs the following steps:
-    1. Calculates the boolean operation 'not' between the given polygon and the set of path polygons.
-    2. Checks if the length of the resulting polygons is greater than 1, indicating cutting through paths.
+    1. Calculates the boolean operation 'not' between the given polygon and
+        the set of path polygons.
+    2. Checks if the length of the resulting polygons is greater than 1,
+    indicating cutting through paths.
     3. Handles cases where the boolean operations 'and' yields empty list.(not on path).
     4. Handles cases where the cutting polygon is on the path end.
         (if any vertix is inside the path it will be considered invalid cut).
@@ -375,7 +402,7 @@ def construct_graph_data_frame(
     the graph data.
 
     The function performs the following steps:
-    1. Iterates over path_polygons, cutting_polygons.items() to process each path and its cutting polygons.
+    1. Iterates over path_polygons, cutting_polygons to process each path and its cutting polygons.
     2. splits path_polygon with cutting_polygons.
     3. For each sub_polygon, extracts node1, node2, and length.
     4. Appends records (node1, node2, length) to a list.
@@ -427,8 +454,8 @@ def get_node_names(poly, labels: list[gdstk.Label]) -> list[str]:
 
     The function performs the following steps:
     1. Extracts points and corresponding names from the given list of labels.
-    2. Iterates through each name and condition in a zip of names and whether points are inside the polygon.
-    3. Appends names to the list 'node_names' if the corresponding condition is True.
+    2. checks whether points are inside the polygon.
+    3. Appends names to the list 'node_names' if the corresponding point are inside the polygon.
     4. Returns a list containing unique node names.
 
     Example:
@@ -485,15 +512,18 @@ def move_labels_on_path(
 
     Parameters:
     - path_polygons (list[gdstk.Polygon]): List of path polygons.
-    - cutting_polygons (list[list[gdstk.Polygon]]): List of lists containing cutting polygons corresponding to each path.
-    - labels (list[list[gdstk.Label]]): List of lists containing labels associated with cutting polygons.
+    - cutting_polygons (list[list[gdstk.Polygon]]): List of lists containing cutting polygons
+        corresponding to each path.
+    - labels (list[list[gdstk.Label]]): List of lists containing labels
+        associated with cutting polygons.
 
     Returns:
     list[gdstk.Label]: List of path_labels.
 
     The function performs the following steps:
     1. Iterates over each path polygon, its cutting polygons, and associated labels.
-    2. For each cutting polygon and label, computes the labels along the path based on the vertices of the intersection.
+    2. For each cutting polygon and label, computes the labels along the path
+        based on the vertices of the intersection.
     3. Appends the calculated labels to the 'moved_labels' list.
     4. Returns the list of moved labels.
     """
