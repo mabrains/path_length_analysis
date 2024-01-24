@@ -1,8 +1,12 @@
 Path Length Analysis
 ====================
 
-[![License](https://img.shields.io/badge/license-LGPLv3-blue)](/LICENSE) 
+[![License](https://img.shields.io/badge/license-LGPLv3-blue)](/LICENSE)  [![CI](https://img.shields.io/badge/CI-passing-green.svg)](https://github.com/mabrains/) [![PyPI Packages](https://img.shields.io/badge/PyPI_Packages-passing-green.svg)](https://github.com/mabrains) [![Docs Build](https://img.shields.io/badge/Docs_Build-no_status-yellow.svg)](https://github.com/mabrains)
+
+<!-- [![PyPI Packages](https://github.com/mabrains/path_length_analysis/actions/workflows/pypi-packages.yml/badge.svg)](https://github.com/mabrains/path_length_analysis/actions/workflows/pypi-packages.yml) -->
+
 [<p align="center"><img src="images/mabrains.png" width="700">](http://mabrains.com/)
+
 
 # Table of contents
 - [Path Length Analysis](#path-length-analysis)
@@ -67,7 +71,7 @@ cd path_length_measurement/
 python3 -m venv ./env
 source ./env/bin/activate
 
-pip install -r requirements.txt
+python3 setup.py install
 ```
 
 You could also install it using `python3-pip` by running the following command:
