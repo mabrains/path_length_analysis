@@ -23,7 +23,7 @@
 Run Path Length Measurements.
 
 Usage:
-  path_length.py  --config=<param> [--run_dir=<run_dir_path>]
+  path_length.py  --config=<config_file_path> [--run_dir=<run_dir_path>]
 
 Options:
     --help -h                    Print this help message.
