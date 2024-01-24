@@ -1,7 +1,35 @@
-#gds_file: gds_examples/test.gds
-gds_file: gds_examples/full_example.gds
+# SPDX-FileCopyrightText: 2024 Mabrains Company
+# Licensed under the GNU GENERAL PUBLIC License, Version 3.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+#                    GNU GENERAL PUBLIC LICENSE
+#                       Version 3, 29 June 2007
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# SPDX-License-Identifier: GPL-3.0
+
+gds_file: gds_examples/test.gds
+cell_name: nsss
 cell_name: chip_AA
-path_layer: 174
-path_dtype: 0
-cutting_layer: 1000
-cutting_dtype: 0
+path_layer: 
+  - 174
+  - 0
+cutting_layer:
+  - 1000
+  - 0
+nodes: 
+  - rect1
+  - rect2
+  - start
+  - mid
