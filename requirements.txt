@@ -34,3 +34,5 @@ gdstk_mabrains
 pyaml
 PyYAML
 typing_extensions
+networkx
+Pyarrow

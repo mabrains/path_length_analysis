@@ -19,40 +19,14 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # SPDX-License-Identifier: LGPL-3.0
+
 # =========================================================================================
 
-TOP_DIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
-VENV_RUN_COMMAND = $(TOP_DIR)/actions_venv/bin/activate
-
-# ======================= 
-# ------ ENV SETUP ------ 
-# =======================
-
-$(TOP_DIR)/actions_venv:
-	@python3 -m venv $(TOP_DIR)/actions_venv
-
-# Install requirements	
-env: $(TOP_DIR)/actions_venv
-	@. $(VENV_RUN_COMMAND); pip install -r requirements.test.txt -r requirements.txt 
-
-# ========================
-# ----- LINTING TEST -----
-# ========================
-
-lint_python: env
-	@$(CONDA_RUN_COMMAND) flake8 .
-
-# ============================
-# ----- PATH-LENGTH TEST -----
-# ============================
-
-path_length_test: env
-	@$(CONDA_RUN_COMMAND) pytest -v tests/pytest_path_length.py
-
-# =================
-# ----- Clean -----
-# =================
-
-# Lint python code
-clean:
-	@rm -rf length_run_*
+gds_file: tests/route_path.gds
+cell_name: TOP
+path_layer: 
+  layer_no: 41
+  layer_dtype: 0
+cutting_layer:
+  layer_no: 66
+  layer_dtype: 0

@@ -127,8 +127,7 @@ You could find the run results at your run directory if you previously specified
 ### Example
 
 ```bash
-  cd path_analysis/
-  python3 path_length.py --config=config.yaml --run_dir=path_length_results
+  python3 path_length.py --config=tests/lidar_no_rad.yaml --run_dir=lidar_no_rad_results
 ```
 
 **Input-Config**
@@ -167,8 +166,8 @@ splitter_p3_start|splitter_p3_end|501.1340271504263|
 We could notice that both paths are identical except for the vertical distance shown in the previous figure. 
 
 ```
-** diff_vertical_part = 35.5 - 10.5 = 20um
-** diff_total_length = 526.134 - 501.134 = 20um
+** diff_vertical_part = 35.5 - 10.5 = 25um
+** diff_total_length = 526.134 - 501.134 = 25um
 ```
 
 ## About Mabrains

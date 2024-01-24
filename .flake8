@@ -22,4 +22,5 @@ exclude =
     env,
     char_env,
     *_env,
+    *env,
     *.egg-info

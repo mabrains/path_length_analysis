@@ -22,31 +22,13 @@
 
 # =========================================================================================
 
-"""
-Run Path Length Measurements.
-
-Usage:
-  path_length.py  --config=<config_file_path> [--run_dir=<run_dir_path>]
-
-Options:
-    --help -h                    Print this help message.
-    --config=<param>             Yaml file contains the path length parameters.
-    --run_dir=<run_dir_path>     directory to save all the results [default: pwd]
-"""
-
-
 import gdstk
 import logging
 import os
-from datetime import datetime
-import time
 from math import sqrt
-from docopt import docopt
-import yaml
 import pandas as pd
 import networkx as nx
 from functools import partial
-from typing import Any
 
 
 def get_length(poly: gdstk.Polygon) -> float:
@@ -416,6 +398,7 @@ def construct_graph_data_frame(
             for sub_poly in splitted_polygons:
                 node_names = get_node_names(sub_poly, path_labels)
                 if len(node_names) == 1:
+                    continue
                     port1 = node_names[0]
                     port2 = f"polygon_{i}_tail_{tail_counter}"
                     tail_counter += 1
@@ -637,8 +620,8 @@ def key_exist_dict(key: str, d: dict):
 
 def path_length(
     gds_file: str,
-    path_layer: list[int],
-    cutting_layer: list[int],
+    path_layer: dict[str, int],
+    cutting_layer: dict[str, int],
     cell_name: str | None = None,
     nodes: list[str] = [],
 ) -> pd.DataFrame:
@@ -678,12 +661,12 @@ def path_length(
     """
     # Make sure that both path and cutting layer passed in proper format and make them as a list
     path_ly = [
-        key_exist_dict('layer_no', path_layer), 
-        key_exist_dict('layer_dtype', path_layer)
+        key_exist_dict("layer_no", path_layer),
+        key_exist_dict("layer_dtype", path_layer),
     ]
-    cut_ly =  [
-        key_exist_dict('layer_no', cutting_layer), 
-        key_exist_dict('layer_dtype', cutting_layer)
+    cut_ly = [
+        key_exist_dict("layer_no", cutting_layer),
+        key_exist_dict("layer_dtype", cutting_layer),
     ]
     # Reading input layout file
     if not os.path.isfile(gds_file):
@@ -702,91 +685,9 @@ def path_length(
     graph = get_nx_graph(df)
     # generate report for all paths
     report = get_paths_report(graph)
+    report_clean_df = report[report["length (um)"] > 0]
     # Filter out required ports only
     if nodes:
-        return filter_path_report(report, nodes)
+        return filter_path_report(report_clean_df, nodes)
 
-    return report
-
-
-def read_yaml(yaml_file: str) -> dict[str, Any]:
-    """
-    Reading yaml file and saving the data to dictionary
-
-    Args:
-        yaml_file (str): yaml file path
-
-    Returns:
-        yaml_dic (dict): contains all the yaml file data
-    """
-
-    # load yaml config data
-    with open(yaml_file, "r") as stream:
-        try:
-            yaml_dic = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            logging.error(exc)
-    return yaml_dic
-
-
-if __name__ == "__main__":
-    # arguments
-    arguments = docopt(__doc__, version="RUN Path Length: 1.0")
-
-    # logs format
-    now_str = datetime.utcnow().strftime("length_run_%Y_%m_%d_%H_%M_%S")
-
-    # checking config file existance
-    config_in = arguments["--config"]
-    if not os.path.exists(config_in):
-        logging.error(f"The configuration file {config_in} doesn't exist, please check")
-        exit(1)
-
-    if (
-        arguments["--run_dir"] == "pwd"
-        or arguments["--run_dir"] == ""
-        or arguments["--run_dir"] is None
-    ):
-        run_dir = os.path.join(os.path.abspath(os.getcwd()), now_str)
-    else:
-        run_dir = os.path.abspath(arguments["--run_dir"])
-
-    # checking run_dir existance & creation
-    if not os.path.isdir(run_dir):
-        os.makedirs(run_dir, exist_ok=True)
-    else:
-        # shutil.rmtree(run_dir)
-        os.makedirs(run_dir, exist_ok=True)
-
-    # logs setup
-    logging.basicConfig(
-        level=logging.DEBUG,
-        handlers=[
-            logging.FileHandler(os.path.join(run_dir, "{}.log".format(now_str))),
-            logging.StreamHandler(),
-        ],
-        format="%(asctime)s | %(levelname)-7s | %(message)s",
-        datefmt="%d-%b-%Y %H:%M:%S",
-    )
-
-    # set pandas options
-    pd.set_option("display.max_rows", None)
-
-    # reading config file
-    config_data = read_yaml(config_in)
-
-    # Calling the main function
-    time_start = time.time()
-    path_length_df = path_length(**config_data)
-    exc_time = time.time() - time_start
-
-    # Save full report with all lengths
-    path_length_df.to_csv(os.path.join(run_dir, "full_report_length.csv"), index=False)
-
-    # Save clean report with desired lengths
-    report_clean_df = path_length_df[path_length_df["length (um)"] > 0]
-    report_clean_df.to_csv(os.path.join(run_dir, "valid_report_length.csv"), index=False)
-    logging.info(f"path_length_report: \n {report_clean_df}")
-
-    # Reporting execution time
-    logging.info(f"Path length execution time: {exc_time} sec")
+    return report_clean_df
