@@ -27,8 +27,8 @@ Usage:
 
 Options:
     --help -h                    Print this help message.
-    --config=<config_file_path>  Yaml file contains the configuration needed for path length analysis parameters
-    --run_dir=<run_dir_path>     Run directory to save all the results [default: pwd]
+    --config=<param>             Yaml file contains the measurements parameters
+    --run_dir=<run_dir_path>     directory to save all the results [default: pwd]
 """
 
 

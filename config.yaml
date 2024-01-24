@@ -28,8 +28,11 @@ path_layer:
 cutting_layer:
   - 1000
   - 0
-nodes: 
-  - rect1
-  - rect2
-  - start
-  - mid
+# nodes: 
+#   - node_1
+#   - splitter_1
+#   - splitter_2
+#   - splitter_3
+#   - end
+#   - end2
+#   - node2
