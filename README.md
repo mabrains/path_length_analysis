@@ -1,7 +1,7 @@
 Path Length Analysis
 ====================
 
-[![License](https://img.shields.io/badge/license-LGPLv3-blue)](/LICENSE)  [![CI](https://img.shields.io/badge/CI-passing-green.svg)](https://github.com/mabrains/) [![PyPI Packages](https://img.shields.io/badge/PyPI_Packages-passing-green.svg)](https://github.com/mabrains) [![Docs Build](https://img.shields.io/badge/Docs_Build-no_status-yellow.svg)](https://github.com/mabrains)
+[![License](https://img.shields.io/badge/license-LGPLv3-blue)](/LICENSE)  [![CI](https://img.shields.io/badge/CI-passing-green.svg)](https://github.com/mabrains/) [![PyPI Packages](https://img.shields.io/badge/PyPI_Packages-no_status-yellow.svg)](https://github.com/mabrains) [![Docs Build](https://img.shields.io/badge/Docs_Build-no_status-yellow.svg)](https://github.com/mabrains)
 
 <!-- [![PyPI Packages](https://github.com/mabrains/path_length_analysis/actions/workflows/pypi-packages.yml/badge.svg)](https://github.com/mabrains/path_length_analysis/actions/workflows/pypi-packages.yml) -->
 
