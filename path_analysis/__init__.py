@@ -21,16 +21,3 @@
 # SPDX-License-Identifier: LGPL-3.0
 
 # =========================================================================================
-
-## Here is a list of python packages required for characterization tool
-
-docopt
-pandas
-numpy
-quantiphy
-tqdm
-#gdstk
-gdstk_mabrains
-pyaml
-PyYAML
-typing_extensions

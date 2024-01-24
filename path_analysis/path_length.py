@@ -1,23 +1,26 @@
-# SPDX-FileCopyrightText: 2024 Mabrains Company
-# Licensed under the GNU GENERAL PUBLIC License, Version 3.0 (the "License");
+# =========================================================================================
+# Copyright (c) 2023, Mabrains LLC Confidential
+# Licensed under the GNU Lesser General Public License, Version 3.0 (the "License");
 # you may not use this file except in compliance with the License.
 
-#                    GNU GENERAL PUBLIC LICENSE
+#                    GNU Lesser General Public License
 #                       Version 3, 29 June 2007
 
 # This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published
+# it under the terms of the GNU Lesser General Public License as published
 # by the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU Lesser General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
+# You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# SPDX-License-Identifier: GPL-3.0
+# SPDX-License-Identifier: LGPL-3.0
+
+# =========================================================================================
 
 """
 Run Path Length Measurements.
@@ -27,7 +30,7 @@ Usage:
 
 Options:
     --help -h                    Print this help message.
-    --config=<param>             Yaml file contains the measurements parameters
+    --config=<param>             Yaml file contains the path length parameters.
     --run_dir=<run_dir_path>     directory to save all the results [default: pwd]
 """
 
@@ -383,20 +386,20 @@ def construct_graph_data_frame(
     - labels (list[list[gdstk.Label]]): List of lists of labels associated with cutting polygons.
 
     Returns:
-    pd.DataFrame: DataFrame with columns 'node1', 'node2', and 'length' representing
+    pd.DataFrame: DataFrame with columns 'port1', 'port2', and 'length' representing
     the graph data.
 
     The function performs the following steps:
     1. Iterates over path_polygons, cutting_polygons to process each path and its cutting polygons.
     2. splits path_polygon with cutting_polygons.
-    3. For each sub_polygon, extracts node1, node2, and length.
-    4. Appends records (node1, node2, length) to a list.
+    3. For each sub_polygon, extracts port1, port2, and length.
+    4. Appends records (port1, port2, length) to a list.
     5. Constructs a DataFrame from the list of records.
     6. Returns the constructed DataFrame.
 
     The resulting DataFrame might look like:
     ```
-        node1               node2        length
+        port1               port2        length
     0   label1_tail_0       node_1         10.0
     1   node_1              node_2         15.0
     2   node_2          polygon_0_tail_1   12.0
@@ -413,16 +416,16 @@ def construct_graph_data_frame(
             for sub_poly in splitted_polygons:
                 node_names = get_node_names(sub_poly, path_labels)
                 if len(node_names) == 1:
-                    node1 = node_names[0]
-                    node2 = f"polygon_{i}_tail_{tail_counter}"
+                    port1 = node_names[0]
+                    port2 = f"polygon_{i}_tail_{tail_counter}"
                     tail_counter += 1
                 elif len(node_names) == 2:
-                    node1, node2 = node_names
+                    port1, port2 = node_names
                 else:
                     continue
                 length = get_length(sub_poly)
-                records.append([node1, node2, length])
-    df = pd.DataFrame(records, columns=["node1", "node2", "length"])
+                records.append([port1, port2, length])
+    df = pd.DataFrame(records, columns=["port1", "port2", "length"])
     return df
 
 
@@ -448,7 +451,7 @@ def get_node_names(poly, labels: list[gdstk.Label]) -> list[str]:
     polygon = gdstk.Polygon(...)
     labels = [label1, label2, label3]
     node_names = get_node_names(polygon, labels)
-    # Result: ['node1', 'node2']
+    # Result: ['port1', 'port2']
     ```
     """
     points = [label.origin for label in labels]
@@ -526,18 +529,18 @@ def get_nx_graph(graph_data_frame: pd.DataFrame) -> nx.Graph:
     """
     Create a NetworkX graph from a DataFrame containing edge information.
     Args:
-        graph_data_frame (pd.DataFrame): A DataFrame with columns 'node1', 'node2', and 'length'
+        graph_data_frame (pd.DataFrame): A DataFrame with columns 'port1', 'port2', and 'length'
                                           representing edges and their corresponding lengths.
     Returns:
         nx.Graph: A NetworkX graph constructed from the provided DataFrame.
     Note:
         This function uses the `nx.from_pandas_edgelist` method to create a graph.
-        The 'node1' and 'node2' columns of the DataFrame represent nodes,
+        The 'port1' and 'port2' columns of the DataFrame represent nodes,
         and the 'length' column is used as the edge attribute.
     Example:
         >>> data = {
-        ...     'node1': ['a', 'b'],
-        ...     'node2': ['b', 'c'],
+        ...     'port1': ['a', 'b'],
+        ...     'port2': ['b', 'c'],
         ...     'length': [1.0, 2.0]
         ... }
         >>> graph_df = pd.DataFrame(data)
@@ -546,7 +549,7 @@ def get_nx_graph(graph_data_frame: pd.DataFrame) -> nx.Graph:
         [('a', 'b', {'length': 1.0}),
          ('b', 'c', {'length': 2.0})]
     """
-    return nx.from_pandas_edgelist(graph_data_frame, "node1", "node2", "length")
+    return nx.from_pandas_edgelist(graph_data_frame, "port1", "port2", "length")
 
 
 def get_paths_report(graph: nx.Graph) -> pd.DataFrame:
@@ -558,14 +561,14 @@ def get_paths_report(graph: nx.Graph) -> pd.DataFrame:
 
     Returns:
     pd.DataFrame: DataFrame containing information about shortest path lengths
-    between all pairs of nodes. Columns include 'node1', 'node2', and 'length'.
+    between all pairs of nodes. Columns include 'port1', 'port2', and 'length'.
 
     The function performs the following steps:
     1. Iterates over all pairs of nodes in the graph.
     2. Uses NetworkX's shortest_path_length to find the shortest path length between each pair,
        considering edge weights defined by the 'length' attribute.
     3. Handles cases where no path exists between nodes using a try-except block.
-    4. Appends records (node1, node2, length) to a list.
+    4. Appends records (port1, port2, length) to a list.
     5. Constructs a DataFrame from the list of records.
     6. Adds a 'sorted_nodes' column for later duplicate checking.
     7. Drops duplicate rows based on the 'sorted_nodes' column.
@@ -588,10 +591,10 @@ def get_paths_report(graph: nx.Graph) -> pd.DataFrame:
         exit(1)
 
     report = pd.DataFrame(records)
-    report.columns = ["node1", "node2", "length"]
+    report.columns = ["port1", "port2", "length (um)"]
     # Sort values in each row and create a new sorted column
     report["sorted_nodes"] = report.apply(
-        lambda row: "".join(sorted([row["node1"], row["node2"]])), axis=1
+        lambda row: "".join(sorted([row["port1"], row["port2"]])), axis=1
     )
 
     # Drop duplicates based on the sorted column
@@ -601,17 +604,35 @@ def get_paths_report(graph: nx.Graph) -> pd.DataFrame:
 
 def filter_path_report(report: pd.DataFrame, nodes: list[str]) -> pd.DataFrame:
     """
-    Filter a DataFrame based on specified nodes in the 'node1' and 'node2' columns.
+    Filter a DataFrame based on specified nodes in the 'port1' and 'port2' columns.
 
     Parameters:
     - report (pd.DataFrame): The input DataFrame containing a network report.
     - nodes (list[str]): A list of nodes to filter the DataFrame by.
 
     Returns:
-    - pd.DataFrame: A filtered DataFrame containing rows where either 'node1' or 'node2' matches
+    - pd.DataFrame: A filtered DataFrame containing rows where either 'port1' or 'port2' matches
         any node in the specified list.
     """
-    return report[report["node1"].isin(nodes) & report["node2"].isin(nodes)]
+    return report[report["port1"].isin(nodes) & report["port2"].isin(nodes)]
+
+
+def key_exist_dict(key: str, d: dict):
+    """
+    Checking if a specific key is exist in a dict
+
+    Args:
+        key (str): Dict key to be checked
+        d (dict): Dict to check in
+    Returns:
+        val (str or list): contains value of the selected key
+    """
+
+    if key in d:
+        return d[key]
+    else:
+        logging.error(f"There is no {key} parameter in the config file, please recheck")
+        exit(1)
 
 
 def path_length(
@@ -633,7 +654,7 @@ def path_length(
 
     Returns:
     pd.DataFrame: DataFrame containing information about shortest path lengths
-    between cutting polygons. Columns include 'node1', 'node2', and 'length'.
+    between cutting polygons. Columns include 'port1', 'port2', and 'length'.
 
     The function performs the following steps:
     1. Reads the gds file using gdstk.read_gds to obtain a gdstk.Library.
@@ -655,7 +676,16 @@ def path_length(
     )
     ```
     """
-    # read gds_lib
+    # Make sure that both path and cutting layer passed in proper format and make them as a list
+    path_ly = [
+        key_exist_dict('layer_no', path_layer), 
+        key_exist_dict('layer_dtype', path_layer)
+    ]
+    cut_ly =  [
+        key_exist_dict('layer_no', cutting_layer), 
+        key_exist_dict('layer_dtype', cutting_layer)
+    ]
+    # Reading input layout file
     if not os.path.isfile(gds_file):
         logging.error(f"{gds_file} file can't be found")
         exit(1)
@@ -663,8 +693,8 @@ def path_length(
     # get path_polygons and cutting polygons
     path_polygons, cutting_polygons, labels = get_polygons(
         gdstk_lib=gdstk_lib,
-        path_layer=path_layer,
-        cutting_layer=cutting_layer,
+        path_layer=path_ly,
+        cutting_layer=cut_ly,
         cell_name=cell_name,
     )
     # get networkx graph
@@ -672,8 +702,10 @@ def path_length(
     graph = get_nx_graph(df)
     # generate report for all paths
     report = get_paths_report(graph)
+    # Filter out required ports only
     if nodes:
         return filter_path_report(report, nodes)
+
     return report
 
 
@@ -694,7 +726,6 @@ def read_yaml(yaml_file: str) -> dict[str, Any]:
             yaml_dic = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             logging.error(exc)
-
     return yaml_dic
 
 
@@ -746,10 +777,16 @@ if __name__ == "__main__":
 
     # Calling the main function
     time_start = time.time()
-    path_length_report = path_length(**config_data)
-    logging.info(f"path_length_report: \n {path_length_report}")
-
+    path_length_df = path_length(**config_data)
     exc_time = time.time() - time_start
+
+    # Save full report with all lengths
+    path_length_df.to_csv(os.path.join(run_dir, "full_report_length.csv"), index=False)
+
+    # Save clean report with desired lengths
+    report_clean_df = path_length_df[path_length_df["length (um)"] > 0]
+    report_clean_df.to_csv(os.path.join(run_dir, "valid_report_length.csv"), index=False)
+    logging.info(f"path_length_report: \n {report_clean_df}")
 
     # Reporting execution time
     logging.info(f"Path length execution time: {exc_time} sec")

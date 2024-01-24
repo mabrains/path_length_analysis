@@ -22,15 +22,16 @@
 
 # =========================================================================================
 
-## Here is a list of python packages required for characterization tool
-
-docopt
-pandas
-numpy
-quantiphy
-tqdm
-#gdstk
-gdstk_mabrains
-pyaml
-PyYAML
-typing_extensions
+gds_file: tests/lidar_no_rad.gds
+cell_name: lidar
+path_layer: 
+  layer_no: 1
+  layer_dtype: 0
+cutting_layer:
+  layer_no: 1
+  layer_dtype: 10
+nodes: 
+- splitter_p1_start
+- splitter_p1_end
+- splitter_p3_start
+- splitter_p3_end

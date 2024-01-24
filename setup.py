@@ -22,15 +22,24 @@
 
 # =========================================================================================
 
-## Here is a list of python packages required for characterization tool
+from setuptools import setup, find_packages
 
-docopt
-pandas
-numpy
-quantiphy
-tqdm
-#gdstk
-gdstk_mabrains
-pyaml
-PyYAML
-typing_extensions
+requirements = open("requirements.txt").read().strip().split("\n")
+
+setup(
+    name="path_analysis",
+    packages=find_packages(),
+    version="0.1.0",
+    description="Measurement Of Path Length For Photonic and Electrical systems",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    author="Mabrains LLC",
+    author_email="contact@mabrains.com",
+    install_requires=requirements,
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Intended Audience :: Developers",
+        "Operating System :: POSIX :: Linux",
+    ],
+    python_requires=">3.9",
+)

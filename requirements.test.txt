@@ -22,15 +22,9 @@
 
 # =========================================================================================
 
-## Here is a list of python packages required for characterization tool
+## Here is a list of python packages required for testing purpose
 
-docopt
-pandas
-numpy
-quantiphy
-tqdm
-#gdstk
-gdstk_mabrains
-pyaml
-PyYAML
-typing_extensions
+flake8
+black
+pytest
+pytest-dependency
