@@ -35,14 +35,19 @@ The tool will be tagged with a production version when ready to do.
 
 ## Folder Structure
 ```
-📁 path_length_measurement
+📁 path_length_analysis
+ ┣ 📁path_analysis              Includes path_length tool script.
  ┣ 📁images                     Contains images used for illustration.
+ ┣ 📁.github                    Includes CI workflows for github actions.
+ ┣ 📜Makefile                   To make some tests for path_length_analysis tool.
  ┣ 📜requirements.txt           List of python packages required for tool installation.
- ┣ 📜path_length.py             Python script to calculate path length for a gds file.
- ┣ 📜config.yaml                Yaml configuration file used for path length.
+ ┣ 📜requirements.test.txt      List of python packages required for testing purpose.
+ ┣ 📜path_length.py             Python script to calculate path length for a gds file. 
+ ┣ 📜setup.py                   Python script used for package setup. 
  ┣ 📜.flake8                    Includes flake8 configuration setup.
  ┣ 📜.gitignore                 Excludes certain local files from being pushed to Git.
  ┗ 📜README.md                  This file that describes the contents.
+
 ```
 
 ## Prerequisites
