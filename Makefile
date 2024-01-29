@@ -40,19 +40,20 @@ env: $(TOP_DIR)/actions_venv
 # ========================
 
 lint_python: env
-	@$(CONDA_RUN_COMMAND) flake8 .
+	@. $(VENV_RUN_COMMAND); flake8 .
 
 # ============================
 # ----- PATH-LENGTH TEST -----
 # ============================
 
+.ONESHELL:
 path_length_test: env
-	@$(CONDA_RUN_COMMAND) pytest -v tests/pytest_path_length.py
-
+	@export PYTHONPATH=$(PYTHONPATH):$(TOP_DIR)
+	@. $(VENV_RUN_COMMAND); pytest -v tests/pytest_path_length.py
 # =================
 # ----- Clean -----
 # =================
 
-# Lint python code
+# remove run dir folder
 clean:
 	@rm -rf length_run_*

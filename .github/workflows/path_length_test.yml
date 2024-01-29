@@ -41,6 +41,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: install qhull
+        run: |
+          sudo apt update
+          sudo apt -y install qhull-bin
       - name: Path Length Testing
         run: |
           make path_length_test
