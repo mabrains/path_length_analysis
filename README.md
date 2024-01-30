@@ -1,9 +1,7 @@
 Path Length Analysis
 ====================
 
-[![License](https://img.shields.io/badge/license-LGPLv3-blue)](/LICENSE)  [![CI](https://img.shields.io/badge/CI-passing-green.svg)](https://github.com/mabrains/) [![PyPI Packages](https://img.shields.io/badge/PyPI_Packages-no_status-yellow.svg)](https://github.com/mabrains) [![Docs Build](https://img.shields.io/badge/Docs_Build-no_status-yellow.svg)](https://github.com/mabrains)
-
-<!-- [![PyPI Packages](https://github.com/mabrains/path_length_analysis/actions/workflows/pypi-packages.yml/badge.svg)](https://github.com/mabrains/path_length_analysis/actions/workflows/pypi-packages.yml) -->
+[![License](https://img.shields.io/badge/license-LGPLv3-blue)](/LICENSE)  [![CI](https://img.shields.io/badge/CI-passing-green.svg)](https://github.com/mabrains/) [![PyPI Packages](https://img.shields.io/badge/PyPI_Packages-passing-green.svg)](https://pypi.org/project/path-analysis/) [![Docs Build](https://img.shields.io/badge/Docs_Build-no_status-yellow.svg)](https://github.com/mabrains)
 
 [<p align="center"><img src="images/mabrains.png" width="700">](http://mabrains.com/)
 
@@ -16,8 +14,11 @@ Path Length Analysis
   - [Folder Structure](#folder-structure)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
-  - [Usage](#usage)
+    - [From PyPi](#from-pypi)
+    - [Build From Source](#build-from-source)
+  - [Script Usage](#script-usage)
     - [Example](#example)
+  - [Python Usage](#python-usage)
   - [About Mabrains](#about-mabrains)
   - [Contact-Us](#contact-us)
   - [License](#license)
@@ -67,6 +68,16 @@ sudo apt-get install -y python3-venv
 
 ## Installation
 
+### From PyPi
+
+To install the package, please use the following command:
+
+```bash
+pip3 install path_analysis
+```
+
+### Build From Source
+
 To install the path length tool from source, you could run the following commands:
 
 ```bash
@@ -79,7 +90,7 @@ source ./env/bin/activate
 python3 setup.py install
 ```
 
-## Usage
+## Script Usage
 
 This tool calculates the path length based on the presence of the cutting shape on the path you need to measure it accompanied by a text that refers to the cutting name, you could consider it as a port on the path you have.
 
@@ -167,6 +178,29 @@ We could notice that both paths are identical except for the vertical distance s
 ```
 ** diff_vertical_part = 35.5 - 10.5 = 25um
 ** diff_total_length = 526.1 - 501.1 = 25um
+```
+
+## Python Usage
+
+Here is an example for using the path analysis package from python directly:
+
+```python3
+
+from path_analysis import path_length
+
+actual_output = path_length(
+                        gds_file="tests/route_path.gds",
+                        path_layer={"layer_no": 41, "layer_dtype": 0},
+                        cutting_layer={"layer_no": 66, "layer_dtype": 0},)
+
+print(actual_output)
+```
+
+And the expected output is:
+
+```
+port1 port2  length (um)
+0  start   end       19.831
 ```
 
 ## About Mabrains
