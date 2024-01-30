@@ -70,8 +70,8 @@ sudo apt-get install -y python3-venv
 To install the path length tool from source, you could run the following commands:
 
 ```bash
-git clone https://github.com/mabrains/path_length_measurement.git
-cd path_length_measurement/
+git clone https://github.com/mabrains/path_length_analysis.git
+cd path_length_analysis/
 
 python3 -m venv ./env
 source ./env/bin/activate
