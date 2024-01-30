@@ -79,12 +79,6 @@ source ./env/bin/activate
 python3 setup.py install
 ```
 
-You could also install it using `python3-pip` by running the following command:
-
-```bash
-pip3 install path_analysis
-```
-
 ## Usage
 
 This tool calculates the path length based on the presence of the cutting shape on the path you need to measure it accompanied by a text that refers to the cutting name, you could consider it as a port on the path you have.
