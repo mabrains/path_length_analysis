@@ -23,7 +23,7 @@
 # =========================================================================================
 
 import pandas as pd
-from path_analysis.path_analysis import path_length
+from path_analysis import path_length
 import numpy as np
 
 

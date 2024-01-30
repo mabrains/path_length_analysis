@@ -21,3 +21,4 @@
 # SPDX-License-Identifier: LGPL-3.0
 
 # =========================================================================================
+from .path_analysis import path_length
