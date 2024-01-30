@@ -29,7 +29,7 @@ requirements = open("requirements.txt").read().strip().split("\n")
 setup(
     name="path_analysis",
     packages=find_packages(),
-    version="0.1.0",
+    version="0.4.0",
     description="Measurement Of Path Length For Photonic and Electrical systems",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

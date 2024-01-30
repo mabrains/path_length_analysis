@@ -30,7 +30,7 @@ numpy
 quantiphy
 tqdm
 #gdstk
-gdstk_mabrains
+gdstk-mabrains
 pyaml
 PyYAML
 typing_extensions
