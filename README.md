@@ -172,7 +172,7 @@ We could notice that both paths are identical except for the vertical distance s
 
 ```
 ** diff_vertical_part = 35.5 - 10.5 = 25um
-** diff_total_length = 526.134 - 501.134 = 25um
+** diff_total_length = 526.1 - 501.1 = 25um
 ```
 
 ## About Mabrains
