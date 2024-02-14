@@ -22,7 +22,7 @@
 
 # =========================================================================================
 
-## Here is a list of python packages required for characterization tool
+## Here is a list of python packages required for path analysis tool
 
 docopt
 pandas
