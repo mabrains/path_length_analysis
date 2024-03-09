@@ -29,8 +29,7 @@ pandas
 numpy
 quantiphy
 tqdm
-#gdstk
-gdstk-mabrains
+gdstk == 0.9.50
 pyaml
 PyYAML
 typing_extensions
